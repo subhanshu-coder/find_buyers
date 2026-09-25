@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f3ee">
+  <title>How HomeScout works</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="index.html"><span class="brand-icon">h<span>✳</span></span><span>homes<span class="brand-light">cout</span></span></a><div class="top-right"><a class="how-link" href="index.html">Back to buyer search</a><span class="market"><i></i> UNITED STATES</span></div></header>
+  <main class="how-page">
+    <section class="how-hero"><div class="eyebrow"><span class="spark">✳</span> A SIMPLE, THOUGHTFUL WORKFLOW</div><h1>From discovery<br>to a <em>hello.</em></h1><p>HomeScout helps home decor makers discover independent US retailers, find public business contact details, and prepare personal introductions.</p><a class="search-btn how-cta" href="index.html">Find buyers <b>↗</b></a></section>
+    <section class="how-steps" aria-label="How HomeScout works">
+      <article class="how-card"><div class="how-num">01</div><div class="how-icon">⌖</div><h2>Choose where to look</h2><p>Enter a US city or ZIP code and choose a buyer type, such as home decor stores, furniture shops, gift boutiques, or interior design studios.</p><span class="how-tag">Foursquare Places</span></article>
+      <article class="how-card"><div class="how-num">02</div><div class="how-icon">▧</div><h2>Review real prospects</h2><p>Browse matching businesses with their public listings, locations, websites, and other details returned by the connected places service.</p><span class="how-tag">You choose the fit</span></article>
+      <article class="how-card"><div class="how-num">03</div><div class="how-icon">✉</div><h2>Look up a business email</h2><p>Ask Snov.io to search the retailer’s domain for public business contact information. Results can vary; when no address is found, add one from the retailer’s official website.</p><span class="how-tag">Snov.io lookup</span></article>
+      <article class="how-card"><div class="how-num">04</div><div class="how-icon">↗</div><h2>Personalize and reach out</h2><p>Edit the suggested introduction and review it before sending. With Resend configured, HomeScout sends through the service and confirms when it accepts the message. Otherwise, it opens a draft in your email app for you to send.</p><span class="how-tag">One message at a time</span></article>
+    </section>
+    <section class="how-note"><div class="how-note-mark">✳</div><div><h2>Made for considered outreach</h2><p>HomeScout does not bulk-send messages or invent personal email addresses. Use accurate sender details, include a valid business postal address and an opt-out method in commercial email, and honor opt-out requests.</p></div></section>
+    <section class="how-setup"><div><div class="section-kicker">WHAT YOU NEED</div><h2>Connect the services</h2></div><div class="setup-list"><p><b>Foursquare</b><span>Finds retailer listings. Add <code>FOURSQUARE_API_KEY</code> to the server’s private <code>.env</code> file.</span></p><p><b>Snov.io</b><span>Looks up public business contacts. Add <code>SNOV_API_USER_ID</code> and <code>SNOV_API_SECRET</code> to <code>.env</code>.</span></p><p><b>Resend</b><span>Optional email delivery. Add <code>RESEND_API_KEY</code> and a verified <code>SENDER_EMAIL</code>. Keep all secrets on the server; never put them in browser code.</span></p></div></section>
+    <footer><div class="footer-mark">✳ &nbsp;Made for makers with a point of view.</div><div><a href="index.html">Return to buyer search</a></div></footer>
+  </main>
+</body>
+</html>
