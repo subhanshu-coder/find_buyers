@@ -17,7 +17,8 @@ const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf
 let snovToken = '', snovTokenExpiresAt = 0;
 function localCorsHeaders(origin) {
   if (!origin) return {};
-  let allowed = origin === 'null';
+  const configuredOrigins=(process.env.APP_ORIGIN||'').split(',').map(x=>x.trim()).filter(Boolean);
+  let allowed = origin === 'null' || configuredOrigins.includes(origin);
   try { const u = new URL(origin); allowed ||= ['localhost','127.0.0.1','::1'].includes(u.hostname) && ['http:','https:'].includes(u.protocol); } catch {}
   return allowed ? { 'access-control-allow-origin':origin, 'vary':'Origin' } : {};
 }
@@ -132,8 +133,3 @@ const server = http.createServer(async (req,res) => {
   res.writeHead(200,{'content-type':mime[path.extname(target)] || 'application/octet-stream','x-content-type-options':'nosniff'}); fs.createReadStream(target).pipe(res);
 });
 server.listen(PORT,()=>console.log(`HomeScout running at http://localhost:${PORT}`));
-
-
-
-
-
