@@ -10,6 +10,10 @@ A lightweight API-powered prospecting website for sellers of home decor products
 
 No npm packages are required.
 
+### Using VS Code Live Server
+
+Live Server serves static files; it does not run the API backend. Start `node server.js` in the `outputs/homescout` folder and leave that terminal running. The page can then be opened with Live Server (usually port 5500) and will connect to the backend on `http://localhost:3000`. If the backend is running on another port, use `?backend=PORT` in the page URL, for example `http://127.0.0.1:5500/?backend=3177`.
+
 ## API setup
 
 - **Foursquare Places:** Set `FOURSQUARE_API_KEY` in `.env`. HomeScout uses Places Search to find home decor, furniture, interior design, and gift retailers near the US city entered. The key stays on the server. Search uses Foursquare Places Service Key authentication.
@@ -31,4 +35,3 @@ Search a US city and buyer type. Open a prospect to look for public domain email
 
 
 
-# find_buyers

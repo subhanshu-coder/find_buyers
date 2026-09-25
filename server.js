@@ -15,7 +15,13 @@ loadEnv();
 const PORT = Number(process.env.PORT || 3000);
 const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.svg':'image/svg+xml' };
 let snovToken = '', snovTokenExpiresAt = 0;
-function json(res, status, data) { res.writeHead(status, { 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store', 'access-control-allow-origin':'null' }); res.end(JSON.stringify(data)); }
+function localCorsHeaders(origin) {
+  if (!origin) return {};
+  let allowed = origin === 'null';
+  try { const u = new URL(origin); allowed ||= ['localhost','127.0.0.1','::1'].includes(u.hostname) && ['http:','https:'].includes(u.protocol); } catch {}
+  return allowed ? { 'access-control-allow-origin':origin, 'vary':'Origin' } : {};
+}
+function json(req, res, status, data) { res.writeHead(status, { 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store', ...localCorsHeaders(req.headers.origin) }); res.end(JSON.stringify(data)); }
 function body(req) { return new Promise((resolve, reject) => { let raw=''; req.on('data', x => { raw += x; if(raw.length > 1e6) req.destroy(); }); req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch(e) { reject(e); } }); }); }
 async function api(url, init) {
   let r;
@@ -57,14 +63,14 @@ async function pollSnovResult(url, token) {
 }
 const server = http.createServer(async (req,res) => {
   const pathname = new URL(req.url, 'http://localhost').pathname;
-  if (req.method === 'OPTIONS') { res.writeHead(204, {'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
+  if (req.method === 'OPTIONS') { res.writeHead(204, {...localCorsHeaders(req.headers.origin),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
   if (pathname.startsWith('/api/')) {
     try {
-      if (pathname === '/api/config' && req.method === 'GET') return json(res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, snov:!!(process.env.SNOV_API_USER_ID && process.env.SNOV_API_SECRET), resend:!!(process.env.RESEND_API_KEY && process.env.SENDER_EMAIL && !process.env.SENDER_EMAIL.includes('your-verified-domain.com')), demo:!process.env.FOURSQUARE_API_KEY });
+      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, snov:!!(process.env.SNOV_API_USER_ID && process.env.SNOV_API_SECRET), resend:!!(process.env.RESEND_API_KEY && process.env.SENDER_EMAIL && !process.env.SENDER_EMAIL.includes('your-verified-domain.com')), demo:!process.env.FOURSQUARE_API_KEY });
       if (pathname === '/api/search' && req.method === 'POST') {
-        if (!process.env.FOURSQUARE_API_KEY) return json(res,503,{error:'Foursquare is not configured. Add FOURSQUARE_API_KEY to .env.'});
+        if (!process.env.FOURSQUARE_API_KEY) return json(req,res,503,{error:'Foursquare is not configured. Add FOURSQUARE_API_KEY to .env.'});
         const b = await body(req); const city = String(b.city || '').trim(); const category = String(b.category || 'home decor stores').trim();
-        if (!city || city.length > 100) return json(res,400,{error:'Enter a US city.'});
+        if (!city || city.length > 100) return json(req,res,400,{error:'Enter a US city.'});
         const categoryKey = category.toLowerCase();
         const searchText = categoryKey.includes('furniture') ? 'furniture' : categoryKey.includes('interior') ? 'interior design' : categoryKey.includes('gift') ? 'gift store' : 'home decor furniture';
         const query = new URLSearchParams({query:searchText,near:`${city}, United States`,limit:'25',fields:'fsq_place_id,name,location,website,tel,categories'});
@@ -75,10 +81,10 @@ const server = http.createServer(async (req,res) => {
         const places = result.results || [];
         const relevant = places.filter(p => !/repair|home care|security|health|office/i.test([p.name,...(p.categories||[]).map(c=>c.name)].join(' ')));
         const prospects = relevant.map((p,i) => ({id:p.fsq_place_id || `foursquare-${i}`,name:p.name || 'Retailer',address:p.location?.formatted_address || [p.location?.locality,p.location?.region,p.location?.country].filter(Boolean).join(', ') || city,website:p.website || '',phone:p.tel || '',maps:'',type:(p.categories || []).map(c=>c.name).filter(Boolean).join(', ') || category,rating:null,reviews:0,domain:p.website || ''}));
-        return json(res,200,{prospects});
+        return json(req,res,200,{prospects});
       }      if (pathname === '/api/contacts' && req.method === 'POST') {
         const b=await body(req); const domain=String(b.domain || '').toLowerCase().replace(/^https?:\/\//,'').split('/')[0].replace(/^www\./,'');
-        if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return json(res,400,{error:'This prospect has no valid website domain.'});
+        if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return json(req,res,400,{error:'This prospect has no valid website domain.'});
         const token=await getSnovAccessToken();
         const form=new URLSearchParams({domain,page:'1'});
         ['Buyer','Purchasing Manager','Merchandising Manager','Owner','Founder','President'].forEach(position=>form.append('positions[]',position));
@@ -89,14 +95,14 @@ const server = http.createServer(async (req,res) => {
         const candidates=Array.isArray(prospects.data)?prospects.data:[];
         const prospect=candidates.find(p=>p.search_emails_start);
         if(!prospect){
-          if(prospects.status!=='completed') return json(res,200,{domain,emails:[],pending:true});
+          if(prospects.status!=='completed') return json(req,res,200,{domain,emails:[],pending:true});
           const genericStart=await api('https://api.snov.io/v2/domain-search/domain-emails/start',{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({domain})});
           const genericTask=genericStart.meta?.task_hash;
           if(!genericTask) throw new Error('Snov.io did not start a company-email fallback search.');
           const generic=await pollSnovResult(genericStart.links?.result||`https://api.snov.io/v2/domain-search/domain-emails/result/${encodeURIComponent(genericTask)}`,token);
           const rows=Array.isArray(generic.data)?generic.data:(generic.data?.emails||[]);
           const emails=rows.map(x=>({email:x.email||x.value||'',firstName:'',lastName:'',position:'',type:'general',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email);
-          return json(res,200,{domain,emails,pending:generic.status!=='completed',contactType:'general'});
+          return json(req,res,200,{domain,emails,pending:generic.status!=='completed',contactType:'general'});
         }
         const emailStartUrl=new URL(prospect.search_emails_start);
         if(emailStartUrl.origin!=='https://api.snov.io'||!emailStartUrl.pathname.startsWith('/v2/domain-search/prospects/search-emails/start/')) throw new Error('Snov.io returned an invalid prospect email lookup URL.');
@@ -106,19 +112,19 @@ const server = http.createServer(async (req,res) => {
         const enriched=await pollSnovResult(emailStarted.links?.result||`https://api.snov.io/v2/domain-search/prospects/search-emails/result/${encodeURIComponent(emailTask)}`,token);
         const rows=Array.isArray(enriched.data)?enriched.data:(enriched.data?.emails||[]);
         const emails=rows.map(x=>({email:x.email||x.value||'',firstName:prospect.first_name||'',lastName:prospect.last_name||'',position:prospect.position||'',type:'buyer',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email);
-        return json(res,200,{domain,emails,pending:prospects.status!=='completed'||enriched.status!=='completed',contactType:'buyer'});
+        return json(req,res,200,{domain,emails,pending:prospects.status!=='completed'||enriched.status!=='completed',contactType:'buyer'});
       }
       if (pathname === '/api/send' && req.method === 'POST') {
-        if (!process.env.RESEND_API_KEY || !process.env.SENDER_EMAIL) return json(res,503,{error:'Resend is not configured. Add RESEND_API_KEY and SENDER_EMAIL to .env.'});
+        if (!process.env.RESEND_API_KEY || !process.env.SENDER_EMAIL) return json(req,res,503,{error:'Resend is not configured. Add RESEND_API_KEY and SENDER_EMAIL to .env.'});
         const b=await body(req); const to=String(b.to || '').trim(), subject=String(b.subject || '').trim(), text=String(b.text || '').trim();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !subject || !text) return json(res,400,{error:'Add a valid recipient, subject, and message.'});
-        if(subject.length>200 || text.length>10000) return json(res,400,{error:'Subject or message is too long.'});
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !subject || !text) return json(req,res,400,{error:'Add a valid recipient, subject, and message.'});
+        if(subject.length>200 || text.length>10000) return json(req,res,400,{error:'Subject or message is too long.'});
         const result=await api('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:process.env.SENDER_EMAIL,to:[to],subject,text})});
         if (!result.id) throw new Error('Resend did not confirm the message. Check your Resend account and verified sender.');
-        return json(res,200,{id:result.id,message:'Email accepted by Resend.'});
+        return json(req,res,200,{id:result.id,message:'Email accepted by Resend.'});
       }
-      return json(res,404,{error:'API route not found.'});
-    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); return json(res,502,{error:message}); }
+      return json(req,res,404,{error:'API route not found.'});
+    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); return json(req,res,502,{error:message}); }
   }
   let file = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const target=path.resolve(root,file);
