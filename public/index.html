@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f3ee">
+  <title>HomeScout — Find your next stockist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="index.html"><span class="brand-icon">h<span>✳</span></span><span>homes<span class="brand-light">cout</span></span></a><div class="top-right"><a class="how-link" href="how-it-works.html">How it works</a><span class="market"><i></i> UNITED STATES</span><span class="avatar">S</span></div></header>
+  <main>
+    <section class="hero"><div class="hero-copy"><div class="eyebrow"><span class="spark">✳</span> RETAILER DISCOVERY, MADE SIMPLE</div><h1>Find the right<br>homes for your <em>home.</em></h1><p>Connect your home decor collection with independent retailers across the United States.</p></div><div class="hero-art" aria-hidden="true"><div class="arch"><div class="arch-sun"></div><div class="arch-plant">⌁</div><div class="arch-vase">◡</div><div class="arch-shelf"></div></div><span class="art-note">Good things<br>find their people.</span><span class="art-star">✳</span></div></section>
+    <section class="search-panel"><div class="search-intro"><div><h2>Find buyers for your products</h2><p>Choose a product, buyer keyword, and Alaska city.</p></div><span class="step-label"><b>01</b> &nbsp;DISCOVER</span></div>
+      <form id="search-form">
+        <label class="field"><span>ALASKA CITY</span><div class="input-wrap"><span class="pin">⌖</span><select id="city" required></select></div></label>
+        <label class="field"><span>PRODUCT CATEGORY</span><div class="input-wrap"><span class="shop">▧</span><select id="product-category" required></select></div></label>
+        <label class="field category-field"><span>BUYER TYPE KEYWORD</span><div class="input-wrap"><span class="shop">⌕</span><select id="buyer-type" required></select></div></label>
+        <button class="search-btn" type="submit"><span>Find buyers</span><b>↗</b></button>
+      </form>
+      <div class="search-foot"><span>⌖ &nbsp;Searching Alaska, United States</span><span id="integration-note">Connect your APIs to search live</span></div>
+    </section>
+    <section class="results-section">
+      <div class="results-head"><div><div class="section-kicker">YOUR PROSPECT LIST</div><h2 id="result-title">Search to find buyers</h2></div><div class="results-tools"><span id="result-count" class="count">0 buyers</span><button id="sort-btn" class="icon-btn" title="Sort prospects">↕</button></div></div>
+      <div id="api-banner" class="api-banner hidden"></div>
+      <div class="buyer-tools">
+        <div class="email-filters" role="group" aria-label="Filter buyers by email availability"><button type="button" class="filter-btn active" data-filter="all">All <span id="all-count">0</span></button><button type="button" class="filter-btn" data-filter="has-email">With email <span id="email-count">0</span></button><button type="button" class="filter-btn" data-filter="no-email">Without email <span id="no-email-count">0</span></button></div>
+        <div class="selection-actions"><button id="find-all-emails" type="button" class="secondary">Find emails for buyers</button><label class="select-all"><input id="select-all" type="checkbox"> Select all with email</label><button id="send-selected" type="button" class="send-btn" disabled>Write to selected <span>↗</span></button></div>
+      </div>
+      <p class="email-lookup-note">Email lookup uses your Snov.io account and may use its search credits. Businesses without a website can be reviewed and contacted manually.</p>
+      <div id="prospects" class="prospect-list"></div>
+      <div id="empty-state" class="empty-state"><span>⌕</span><b>No buyers to show</b><p>Choose an Alaska city, product, and buyer keyword to start a live search.</p></div>
+    </section>
+    <footer><div class="footer-mark">✳ &nbsp;Made for makers with a point of view.</div><div>Powered by Foursquare &nbsp;·&nbsp; Find thoughtfully. Reach out respectfully.</div></footer>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <dialog id="email-modal"><form method="dialog" class="modal-close"><button aria-label="Close">×</button></form><div class="modal-kicker">PERSONAL INTRODUCTION</div><h2>Say hello to <span id="email-company">a buyer</span></h2><p class="modal-sub">A thoughtful note can be the start of something good.</p><p id="contact-source" class="modal-sub">Choose a public business email for your note.</p><form id="email-form"><label id="email-recipient-field" class="field"><span>TO (PUBLIC BUSINESS EMAIL)</span><input id="email-to" type="email" required placeholder="buyer@store.com" autocomplete="email"></label><label class="field"><span>SUBJECT</span><input id="email-subject" required maxlength="200"></label><label class="field"><span>YOUR NOTE</span><textarea id="email-text" rows="8" maxlength="10000" required></textarea></label><div class="compliance-note">For commercial email, include your valid postal address and a clear way to opt out. Send only relevant, truthful outreach and honor opt-outs. Selected recipients will be added privately as BCC.</div><div class="modal-actions"><button type="button" class="secondary" id="cancel-email">Cancel</button><button class="send-btn" type="submit">Send email <span>↗</span></button></div></form></dialog>
+  <script src="app.js?v=13"></script>
+</body>
+</html>
+

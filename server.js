@@ -2,9 +2,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const root = __dirname;
+const projectRoot = __dirname;
+const root = path.join(projectRoot, 'public');
 function loadEnv() {
-  for (const envFile of [path.join(root, '.env'), path.join(root, 'outputs', 'homescout', '.env')]) {
+  for (const envFile of [path.join(projectRoot, '.env'), path.join(projectRoot, 'outputs', 'homescout', '.env')]) {
     try {
       for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
         const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
@@ -75,13 +76,11 @@ async function handleRequest(req,res) {
       if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, snov:!!(process.env.SNOV_API_USER_ID && process.env.SNOV_API_SECRET), resend:!!(process.env.RESEND_API_KEY && process.env.SENDER_EMAIL && !process.env.SENDER_EMAIL.includes('your-verified-domain.com')), demo:!process.env.FOURSQUARE_API_KEY });
       if (pathname === '/api/search' && req.method === 'POST') {
         if (!process.env.FOURSQUARE_API_KEY) return json(req,res,503,{error:'Foursquare is not configured. Add FOURSQUARE_API_KEY to .env.'});
-        const b = await body(req); const city = String(b.city || '').trim(); const category = String(b.category || 'home decor stores').trim();
+        const b = await body(req); const city = String(b.city || '').trim(); const productCategory=String(b.productCategory||'Votive candle holders').trim(); const buyerType=String(b.buyerType||'votive candle holders').trim();
         if (!city || city.length > 100) return json(req,res,400,{error:'Enter a US city.'});
-        const categoryKey = category.toLowerCase();
-        const searchText = categoryKey.includes('furniture') ? 'furniture' : categoryKey.includes('interior') ? 'interior design' : categoryKey.includes('gift') ? 'gift store' : 'home decor furniture';
-        const query = new URLSearchParams({query:searchText,near:`${city}, United States`,limit:'25',fields:'fsq_place_id,name,location,website,tel,categories'});
-        if (categoryKey.includes('gift')) query.set('fsq_category_ids','4bf58dd8d48988d128951735');
-        else if (!categoryKey.includes('interior')) query.set('fsq_category_ids','4bf58dd8d48988d1f8941735');
+        if(productCategory.length>100||buyerType.length>100) return json(req,res,400,{error:'Choose a valid product category and buyer keyword.'});
+        const searchText = `${buyerType} ${productCategory}`;
+        const query = new URLSearchParams({query:searchText,near:`${city}, Alaska, United States`,limit:'25',fields:'fsq_place_id,name,location,website,tel,categories'});
         const result = await api(`https://places-api.foursquare.com/places/search?${query}`,{headers:{'Accept':'application/json','Authorization':`Bearer ${process.env.FOURSQUARE_API_KEY}`,'X-Places-Api-Version':'2025-06-17'}});
 
         const places = result.results || [];
@@ -122,10 +121,16 @@ async function handleRequest(req,res) {
       }
       if (pathname === '/api/send' && req.method === 'POST') {
         if (!process.env.RESEND_API_KEY || !process.env.SENDER_EMAIL) return json(req,res,503,{error:'Resend is not configured. Add RESEND_API_KEY and SENDER_EMAIL to .env.'});
-        const b=await body(req); const to=String(b.to || '').trim(), subject=String(b.subject || '').trim(), text=String(b.text || '').trim();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !subject || !text) return json(req,res,400,{error:'Add a valid recipient, subject, and message.'});
+        const b=await body(req); const subject=String(b.subject || '').trim(), text=String(b.text || '').trim();
+        const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const recipients=Array.isArray(b.recipients)?[...new Set(b.recipients.map(x=>String(x).trim()).filter(Boolean))]:[];
+        const to=String(b.to || '').trim();
+        if ((!recipients.length&&!emailPattern.test(to)) || recipients.some(email=>!emailPattern.test(email)) || recipients.length>50 || !subject || !text) return json(req,res,400,{error:'Add a valid recipient and message. Bulk email supports up to 50 recipients.'});
         if(subject.length>200 || text.length>10000) return json(req,res,400,{error:'Subject or message is too long.'});
-        const result=await api('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:process.env.SENDER_EMAIL,to:[to],subject,text})});
+        const senderAddress=String(process.env.SENDER_EMAIL).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+        const message={from:process.env.SENDER_EMAIL,to:recipients.length?[senderAddress]:[to],subject,text};
+        if(recipients.length) message.bcc=recipients;
+        const result=await api('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(message)});
         if (!result.id) throw new Error('Resend did not confirm the message. Check your Resend account and verified sender.');
         return json(req,res,200,{id:result.id,message:'Email accepted by Resend.'});
       }
@@ -141,6 +146,7 @@ async function handleRequest(req,res) {
 const server = http.createServer(handleRequest);
 module.exports = { handleRequest };
 if (require.main === module) server.listen(PORT,()=>console.log(`HomeScout running at http://localhost:${PORT}`));
+
 
 
 

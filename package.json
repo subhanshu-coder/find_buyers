@@ -5,3 +5,4 @@
   "description": "Find US home decor retailers and contact leads with API integrations.",
   "scripts": { "start": "node server.js" }
 }
+
