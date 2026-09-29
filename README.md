@@ -5,7 +5,7 @@ A lightweight API-powered prospecting website for sellers of home decor products
 ## Run locally
 
 1. Install Node.js 18 or later.
-2. Copy `.env.example` to `.env` and add API credentials (details below).
+2. Copy `.env.example` to `.env` in this folder and add API credentials (details below). Keep this file private.
 3. Run `node server.js` from this folder and open http://localhost:3000.
 
 No npm packages are required.
@@ -13,6 +13,18 @@ No npm packages are required.
 ### Using VS Code Live Server
 
 Live Server serves static files; it does not run the API backend. Start `node server.js` in the `outputs/homescout` folder and leave that terminal running. The page can then be opened with Live Server (usually port 5500) and will connect to the backend on `http://localhost:3000`. If the backend is running on another port, use `?backend=PORT` in the page URL, for example `http://127.0.0.1:5500/?backend=3177`.
+
+### Using GitHub Pages
+
+GitHub Pages hosts the static website only. Deploy this Node server separately to a Node.js hosting service. Set `FOURSQUARE_API_KEY`, `SNOV_API_USER_ID`, `SNOV_API_SECRET`, and `APP_ORIGIN` in the backend host's environment settings. `APP_ORIGIN` must exactly match your GitHub Pages origin, such as `https://your-name.github.io` (no trailing slash). Then open the Pages site with `?api=https://YOUR-API-HOST` appended to its URL. Do not commit API keys or put them in the Pages URL.
+
+### Deploy the complete app to Vercel
+
+For one public link with working buyer search, deploy this repository root to Vercel. Push the updated project files to GitHub, then in Vercel choose **Add New → Project** and import that repository with the repository root as the project root. Vercel serves the website and runs the `/api` function on the same domain, so the live link does not need an `?api=` URL parameter. In the Vercel project's **Settings → Environment Variables**, add `FOURSQUARE_API_KEY`, `SNOV_API_USER_ID`, and `SNOV_API_SECRET`; optionally add `RESEND_API_KEY` and `SENDER_EMAIL` for direct email sending. Save and redeploy. Use the generated `*.vercel.app` link as the public site; the GitHub Pages link will still show the static-host notice.
+
+### Deploy to Vercel
+
+Import the project root in Vercel, or run `vercel` from this folder and follow the prompts. The `/api` Vercel Function serves the existing API routes; Vercel serves the HTML, CSS, and browser JavaScript as static files. Add `FOURSQUARE_API_KEY`, `SNOV_API_USER_ID`, and `SNOV_API_SECRET` under the Vercel project's Environment Variables (add `RESEND_API_KEY` and `SENDER_EMAIL` only if you want direct email sending), then redeploy. Never commit `.env` or expose provider secrets in browser code.
 
 ## API setup
 

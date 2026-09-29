@@ -1,5 +1,4 @@
 .env
-node_modules/
 outputs/homescout/.env
-.vercel/
 .npm-cache-codex/
+.vercel-user/

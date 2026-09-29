@@ -4,12 +4,14 @@ const path = require('path');
 
 const root = __dirname;
 function loadEnv() {
-  try {
-    for (const line of fs.readFileSync(path.join(root, '.env'), 'utf8').split(/\r?\n/)) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
-    }
-  } catch {}
+  for (const envFile of [path.join(root, '.env'), path.join(root, 'outputs', 'homescout', '.env')]) {
+    try {
+      for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
+        const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+      }
+    } catch {}
+  }
 }
 loadEnv();
 const PORT = Number(process.env.PORT || 3000);
@@ -23,7 +25,10 @@ function localCorsHeaders(origin) {
   return allowed ? { 'access-control-allow-origin':origin, 'vary':'Origin' } : {};
 }
 function json(req, res, status, data) { res.writeHead(status, { 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store', ...localCorsHeaders(req.headers.origin) }); res.end(JSON.stringify(data)); }
-function body(req) { return new Promise((resolve, reject) => { let raw=''; req.on('data', x => { raw += x; if(raw.length > 1e6) req.destroy(); }); req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch(e) { reject(e); } }); }); }
+function body(req) {
+  if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);
+  return new Promise((resolve, reject) => { let raw=''; req.on('data', x => { raw += x; if(raw.length > 1e6) req.destroy(); }); req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch(e) { reject(e); } }); });
+}
 async function api(url, init) {
   let r;
   try { r = await fetch(url, init); }
@@ -62,7 +67,7 @@ async function pollSnovResult(url, token) {
   }
   return result;
 }
-const server = http.createServer(async (req,res) => {
+async function handleRequest(req,res) {
   const pathname = new URL(req.url, 'http://localhost').pathname;
   if (req.method === 'OPTIONS') { res.writeHead(204, {...localCorsHeaders(req.headers.origin),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
   if (pathname.startsWith('/api/')) {
@@ -131,5 +136,13 @@ const server = http.createServer(async (req,res) => {
   const target=path.resolve(root,file);
   if (!target.startsWith(root + path.sep) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) { res.writeHead(404); return res.end('Not found'); }
   res.writeHead(200,{'content-type':mime[path.extname(target)] || 'application/octet-stream','x-content-type-options':'nosniff'}); fs.createReadStream(target).pipe(res);
-});
-server.listen(PORT,()=>console.log(`HomeScout running at http://localhost:${PORT}`));
+}
+
+const server = http.createServer(handleRequest);
+module.exports = { handleRequest };
+if (require.main === module) server.listen(PORT,()=>console.log(`HomeScout running at http://localhost:${PORT}`));
+
+
+
+
+
