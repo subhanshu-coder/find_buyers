@@ -99,21 +99,28 @@ async function handleRequest(req,res) {
         const prospects=await pollSnovResult(started.links?.result||`https://api.snov.io/v2/domain-search/prospects/result/${encodeURIComponent(prospectTask)}`,token);
         const candidates=Array.isArray(prospects.data)?prospects.data:[];
         const buyerCandidates=candidates.filter(p=>p.search_emails_start).slice(0,3);
-        let emails=[];
-        const enrichmentResults=await Promise.allSettled(buyerCandidates.map(async prospect=>{
-          const emailStartUrl=new URL(prospect.search_emails_start);
-          if(emailStartUrl.origin!=='https://api.snov.io'||!emailStartUrl.pathname.startsWith('/v2/domain-search/prospects/search-emails/start/')) throw new Error('Snov.io returned an invalid prospect email lookup URL.');
-          const emailStarted=await api(emailStartUrl.toString(),{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams()});
-          const emailTask=emailStarted.meta?.task_hash;
-          if(!emailTask) throw new Error('Snov.io did not start email enrichment for the matching buyer.');
-          const enriched=await pollSnovResult(emailStarted.links?.result||`https://api.snov.io/v2/domain-search/prospects/search-emails/result/${encodeURIComponent(emailTask)}`,token);
-          const rows=Array.isArray(enriched.data)?enriched.data:(enriched.data?.emails||[]);
-          return {rows,prospect,pending:enriched.status!=='completed'};
-        }));
-        let enrichmentPending=prospects.status!=='completed';
-        for(const result of enrichmentResults){if(result.status==='fulfilled'){const {rows,prospect,pending}=result.value;enrichmentPending ||= pending;emails.push(...rows.map(x=>({email:x.email||x.value||'',firstName:prospect.first_name||'',lastName:prospect.last_name||'',position:prospect.position||'',type:'buyer',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email));}}
+        const emails=[];
+        let enrichmentPending=prospects.status!=='completed',enrichmentError=null;
+        for(const prospect of buyerCandidates){
+          try{
+            const emailStartUrl=new URL(prospect.search_emails_start);
+            if(emailStartUrl.origin!=='https://api.snov.io'||!emailStartUrl.pathname.startsWith('/v2/domain-search/prospects/search-emails/start/')) throw new Error('Snov.io returned an invalid prospect email lookup URL.');
+            const emailStarted=await api(emailStartUrl.toString(),{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams()});
+            const emailTask=emailStarted.meta?.task_hash;
+            if(!emailTask) throw new Error('Snov.io did not start email enrichment for the matching buyer.');
+            const enriched=await pollSnovResult(emailStarted.links?.result||`https://api.snov.io/v2/domain-search/prospects/search-emails/result/${encodeURIComponent(emailTask)}`,token);
+            const rows=Array.isArray(enriched.data)?enriched.data:(enriched.data?.emails||[]);
+            enrichmentPending ||= enriched.status!=='completed';
+            emails.push(...rows.map(x=>({email:x.email||x.value||'',firstName:prospect.first_name||'',lastName:prospect.last_name||'',position:prospect.position||'',type:'buyer',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email));
+          }catch(error){
+            enrichmentError=error;
+            console.error('[api/contacts] Snov contact lookup failed',{message:error.message});
+            if(/rate limit/i.test(error.message)) break;
+          }
+        }
         if(!emails.length){
-          if(prospects.status!=='completed') return json(req,res,200,{domain,emails:[],pending:true});
+          if(prospects.status!=='completed'||enrichmentPending) return json(req,res,200,{domain,emails:[],pending:true});
+          if(enrichmentError) throw enrichmentError;
           const genericStart=await api('https://api.snov.io/v2/domain-search/domain-emails/start',{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({domain})});
           const genericTask=genericStart.meta?.task_hash;
           if(!genericTask) throw new Error('Snov.io did not start a company-email fallback search.');
@@ -128,7 +135,7 @@ async function handleRequest(req,res) {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
       }
       return json(req,res,404,{error:'API route not found.'});
-    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); return json(req,res,502,{error:message}); }
+    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
   }
   let file = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const target=path.resolve(root,file);
