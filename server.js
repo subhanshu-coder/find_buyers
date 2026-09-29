@@ -85,7 +85,7 @@ async function handleRequest(req,res) {
 
         const places = result.results || [];
         const relevant = places.filter(p => !/repair|home care|security|health|office/i.test([p.name,...(p.categories||[]).map(c=>c.name)].join(' ')));
-        const prospects = relevant.map((p,i) => ({id:p.fsq_place_id || `foursquare-${i}`,name:p.name || 'Retailer',address:p.location?.formatted_address || [p.location?.locality,p.location?.region,p.location?.country].filter(Boolean).join(', ') || city,website:p.website || '',phone:p.tel || '',maps:'',type:(p.categories || []).map(c=>c.name).filter(Boolean).join(', ') || category,rating:null,reviews:0,domain:p.website || ''}));
+        const prospects = relevant.map((p,i) => ({id:p.fsq_place_id || `foursquare-${i}`,name:p.name || 'Retailer',address:p.location?.formatted_address || [p.location?.locality,p.location?.region,p.location?.country].filter(Boolean).join(', ') || city,website:p.website || '',phone:p.tel || '',maps:'',type:(p.categories || []).map(c=>c.name).filter(Boolean).join(', ') || buyerType,rating:null,reviews:0,domain:p.website || ''}));
         return json(req,res,200,{prospects});
       }      if (pathname === '/api/contacts' && req.method === 'POST') {
         const b=await body(req); const domain=String(b.domain || '').toLowerCase().replace(/^https?:\/\//,'').split('/')[0].replace(/^www\./,'');
