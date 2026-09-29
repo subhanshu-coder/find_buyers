@@ -80,7 +80,7 @@ async function handleRequest(req,res) {
         if (!city || city.length > 100) return json(req,res,400,{error:'Enter a US city.'});
         if(productCategory.length>100||buyerType.length>100) return json(req,res,400,{error:'Choose a valid product category and buyer keyword.'});
         const searchText = `${buyerType} ${productCategory}`;
-        const query = new URLSearchParams({query:searchText,near:`${city}, Alaska, United States`,limit:'25',fields:'fsq_place_id,name,location,website,tel,categories'});
+        const query = new URLSearchParams({query:searchText,near:`${city}, Alaska, United States`,limit:'50',fields:'fsq_place_id,name,location,website,tel,categories'});
         const result = await api(`https://places-api.foursquare.com/places/search?${query}`,{headers:{'Accept':'application/json','Authorization':`Bearer ${process.env.FOURSQUARE_API_KEY}`,'X-Places-Api-Version':'2025-06-17'}});
 
         const places = result.results || [];
@@ -92,32 +92,37 @@ async function handleRequest(req,res) {
         if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return json(req,res,400,{error:'This prospect has no valid website domain.'});
         const token=await getSnovAccessToken();
         const form=new URLSearchParams({domain,page:'1'});
-        ['Buyer','Purchasing Manager','Merchandising Manager','Owner','Founder','President'].forEach(position=>form.append('positions[]',position));
+        ['Buyer','Purchasing Manager','Merchandising Manager','Owner','Founder','President','Retail Buyer','Category Manager','Store Manager','General Manager'].forEach(position=>form.append('positions[]',position));
         const started=await api('https://api.snov.io/v2/domain-search/prospects/start',{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:form});
         const prospectTask=started.meta?.task_hash;
         if(!prospectTask) throw new Error('Snov.io did not start a buyer search for this domain.');
         const prospects=await pollSnovResult(started.links?.result||`https://api.snov.io/v2/domain-search/prospects/result/${encodeURIComponent(prospectTask)}`,token);
         const candidates=Array.isArray(prospects.data)?prospects.data:[];
-        const prospect=candidates.find(p=>p.search_emails_start);
-        if(!prospect){
+        const buyerCandidates=candidates.filter(p=>p.search_emails_start).slice(0,3);
+        let emails=[];
+        const enrichmentResults=await Promise.allSettled(buyerCandidates.map(async prospect=>{
+          const emailStartUrl=new URL(prospect.search_emails_start);
+          if(emailStartUrl.origin!=='https://api.snov.io'||!emailStartUrl.pathname.startsWith('/v2/domain-search/prospects/search-emails/start/')) throw new Error('Snov.io returned an invalid prospect email lookup URL.');
+          const emailStarted=await api(emailStartUrl.toString(),{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams()});
+          const emailTask=emailStarted.meta?.task_hash;
+          if(!emailTask) throw new Error('Snov.io did not start email enrichment for the matching buyer.');
+          const enriched=await pollSnovResult(emailStarted.links?.result||`https://api.snov.io/v2/domain-search/prospects/search-emails/result/${encodeURIComponent(emailTask)}`,token);
+          const rows=Array.isArray(enriched.data)?enriched.data:(enriched.data?.emails||[]);
+          return {rows,prospect,pending:enriched.status!=='completed'};
+        }));
+        let enrichmentPending=prospects.status!=='completed';
+        for(const result of enrichmentResults){if(result.status==='fulfilled'){const {rows,prospect,pending}=result.value;enrichmentPending ||= pending;emails.push(...rows.map(x=>({email:x.email||x.value||'',firstName:prospect.first_name||'',lastName:prospect.last_name||'',position:prospect.position||'',type:'buyer',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email));}}
+        if(!emails.length){
           if(prospects.status!=='completed') return json(req,res,200,{domain,emails:[],pending:true});
           const genericStart=await api('https://api.snov.io/v2/domain-search/domain-emails/start',{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({domain})});
           const genericTask=genericStart.meta?.task_hash;
           if(!genericTask) throw new Error('Snov.io did not start a company-email fallback search.');
           const generic=await pollSnovResult(genericStart.links?.result||`https://api.snov.io/v2/domain-search/domain-emails/result/${encodeURIComponent(genericTask)}`,token);
           const rows=Array.isArray(generic.data)?generic.data:(generic.data?.emails||[]);
-          const emails=rows.map(x=>({email:x.email||x.value||'',firstName:'',lastName:'',position:'',type:'general',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email);
+          emails=rows.map(x=>({email:x.email||x.value||'',firstName:'',lastName:'',position:'',type:'general',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email);
           return json(req,res,200,{domain,emails,pending:generic.status!=='completed',contactType:'general'});
         }
-        const emailStartUrl=new URL(prospect.search_emails_start);
-        if(emailStartUrl.origin!=='https://api.snov.io'||!emailStartUrl.pathname.startsWith('/v2/domain-search/prospects/search-emails/start/')) throw new Error('Snov.io returned an invalid prospect email lookup URL.');
-        const emailStarted=await api(emailStartUrl.toString(),{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams()});
-        const emailTask=emailStarted.meta?.task_hash;
-        if(!emailTask) throw new Error('Snov.io did not start email enrichment for the matching buyer.');
-        const enriched=await pollSnovResult(emailStarted.links?.result||`https://api.snov.io/v2/domain-search/prospects/search-emails/result/${encodeURIComponent(emailTask)}`,token);
-        const rows=Array.isArray(enriched.data)?enriched.data:(enriched.data?.emails||[]);
-        const emails=rows.map(x=>({email:x.email||x.value||'',firstName:prospect.first_name||'',lastName:prospect.last_name||'',position:prospect.position||'',type:'buyer',verification:x.smtp_status||x.verification||'unknown'})).filter(x=>x.email);
-        return json(req,res,200,{domain,emails,pending:prospects.status!=='completed'||enriched.status!=='completed',contactType:'buyer'});
+        return json(req,res,200,{domain,emails:[...new Map(emails.map(e=>[e.email.toLowerCase(),e])).values()],pending:enrichmentPending,contactType:'buyer'});
       }
       if (pathname === '/api/send' && req.method === 'POST') {
         if (!process.env.RESEND_API_KEY || !process.env.SENDER_EMAIL) return json(req,res,503,{error:'Resend is not configured. Add RESEND_API_KEY and SENDER_EMAIL to .env.'});

@@ -26,7 +26,7 @@ GitHub Pages serves only static files and cannot run the API. Deploy the backend
 
 ## Buyer emails and outreach
 
-Foursquare Places searches for potential retailers. Snov.io looks up public business emails by website domain; lookups may use account credits. Review the results, including website and email, before outreach. Buyers can be filtered by email availability and selected. Selected emails are sent using private BCC so recipients do not see one another. Without Resend, HomeScout opens a prefilled email draft in the user's email application. The app never reports an email as sent unless Resend confirms it.
+Foursquare Places returns up to 50 potential retailers per city/product/keyword search. Snov.io checks up to three buyer contacts per business, with three businesses looked up concurrently; lookups may use account credits. Review results, including each website and email, before outreach. Buyers can be filtered by email availability and selected. Selected emails are sent using private BCC so recipients do not see one another. Without Resend, HomeScout opens a prefilled email draft in the user's email application. The app never reports an email as sent unless Resend confirms it.
 
 Add a verified sender in Resend before direct sending. Use truthful sender details, include a valid postal address and opt-out instructions in commercial messages, and honor opt-outs.
 
