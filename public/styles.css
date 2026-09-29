@@ -27,6 +27,9 @@
 .muted-detail{color:#898b82}
 .buyer-email-list{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .buyer-email-list a{background:#edf2e9;padding:4px 7px;border-radius:4px;font-weight:600}
+.email-draft-preview{flex-basis:100%;color:#596454;font-size:10px;line-height:1.6}
+.email-draft-preview summary{cursor:pointer;font-weight:700}
+.email-draft-preview p{padding:10px 12px;border-left:2px solid #c8d4c5;background:#f7f8f3;white-space:normal;max-width:620px}
 .email-state{border-radius:20px;background:#f2f0e9;padding:4px 8px;color:#777970;font-size:9px}
 .email-state.found{background:#eaf0e8;color:#355c44}
 .email-state.none{background:#f6eee5;color:#8b674c}
