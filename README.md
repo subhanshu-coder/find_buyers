@@ -1,6 +1,6 @@
 # HomeScout — Alaska Home Decor Buyer Finder
 
-HomeScout helps home decor sellers discover potential retail buyers in Alaska, look up publicly available business email addresses, review websites, and draft individual or selected-recipient outreach.
+HomeScout helps home decor sellers discover potential retail buyers in Alaska, automatically look up public business email contacts, review websites, and prepare individual email drafts.
 
 ## Run locally
 
@@ -20,20 +20,20 @@ Cities include Anchorage, Wasilla, Palmer, Kenai, Soldotna, Homer, Juneau, Sitka
 
 ## Vercel deployment
 
-Import the repository root into Vercel. The included `vercel.json` uses the **Other** framework, serves `public/` as static assets, and deploys `/api` as a serverless function. Add `FOURSQUARE_API_KEY`, `SNOV_API_USER_ID`, and `SNOV_API_SECRET` in the Vercel project's Environment Variables, then redeploy. Add `RESEND_API_KEY` and `SENDER_EMAIL` if you want the API to send email directly. Never commit `.env` or put API secrets in browser code.
+Import the repository root into Vercel. The included `vercel.json` uses the **Other** framework, serves `public/` as static assets, and deploys `/api` as a serverless function. Add `FOURSQUARE_API_KEY`, `SNOV_API_USER_ID`, and `SNOV_API_SECRET` in the Vercel project's Environment Variables, then redeploy. Never commit `.env` or put API secrets in browser code.
 
 GitHub Pages serves only static files and cannot run the API. Deploy the backend separately and set the page's `?api=https://YOUR-API-HOST` parameter if using Pages.
 
 ## Buyer emails and outreach
 
-Foursquare Places returns up to 50 potential retailers per city/product/keyword search. Snov.io checks up to three buyer contacts per business, with three businesses looked up concurrently; lookups may use account credits. Review results, including each website and email, before outreach. Buyers can be filtered by email availability and selected. Selected emails are sent using private BCC so recipients do not see one another. Without Resend, HomeScout opens a prefilled email draft in the user's email application. The app never reports an email as sent unless Resend confirms it.
+Foursquare Places returns up to 50 potential retailers per city/product/keyword search. After search, Snov.io checks up to three buyer contacts per business, sequentially, to avoid bursts against its API rate limit. This can take time and use Snov.io credits. Results appear as checks complete and can be filtered by email availability. Email drafts open one recipient at a time in the user's email app; direct sending through Resend is disabled for contacts discovered by the buyer finder.
 
-Add a verified sender in Resend before direct sending. Use truthful sender details, include a valid postal address and opt-out instructions in commercial messages, and honor opt-outs.
+Use truthful sender details, include a valid postal address and opt-out instructions in commercial messages, and contact only recipients who agreed to hear from you.
 
 ## API endpoints
 
 - `GET /api/config` — reports whether provider integrations are configured.
 - `POST /api/search` — searches Foursquare for a city, product category, and buyer keyword.
 - `POST /api/contacts` — searches Snov.io for domain email results.
-- `POST /api/send` — sends one reviewed email or one message to up to 50 selected recipients using private BCC.
+- `POST /api/send` — disabled for buyer-finder contacts; the app opens a reviewed one-to-one draft in the sender's email app.
 
