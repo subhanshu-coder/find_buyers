@@ -24,9 +24,9 @@
       <div id="api-banner" class="api-banner hidden"></div>
       <div class="buyer-tools">
         <div class="email-filters" role="group" aria-label="Filter buyers by email availability"><button type="button" class="filter-btn active" data-filter="all">All <span id="all-count">0</span></button><button type="button" class="filter-btn" data-filter="has-email">With email <span id="email-count">0</span></button><button type="button" class="filter-btn" data-filter="no-email">Without email <span id="no-email-count">0</span></button></div>
-        <div class="selection-actions"><button id="find-all-emails" type="button" class="secondary">Find emails for buyers</button><label class="select-all"><input id="select-all" type="checkbox"> Select all with email</label><button id="send-selected" type="button" class="send-btn" disabled>Write to selected <span>↗</span></button></div>
+        <div class="selection-actions"><label class="select-all"><input id="select-all" type="checkbox"> Select all with email</label><button id="send-selected" type="button" class="send-btn" disabled>Write to selected <span>↗</span></button></div>
       </div>
-      <p class="email-lookup-note">Search returns up to 50 matches per query. Email lookup checks up to 3 buyer contacts per business and processes 3 businesses at a time; Snov.io lookups may use account credits. Businesses without a website can be reviewed and contacted manually.</p>
+      <p id="email-lookup-note" class="email-lookup-note">Search checks up to 3 buyer contacts for each website automatically through Snov.io. Checks run one business at a time and may take time or use account credits. Email filters update as results arrive.</p>
       <div id="prospects" class="prospect-list"></div>
       <div id="empty-state" class="empty-state"><span>⌕</span><b>No buyers to show</b><p>Choose an Alaska city, product, and buyer keyword to start a live search.</p></div>
     </section>
@@ -34,7 +34,7 @@
   </main>
   <div id="toast" class="toast" role="status"></div>
   <dialog id="email-modal"><form method="dialog" class="modal-close"><button aria-label="Close">×</button></form><div class="modal-kicker">PERSONAL INTRODUCTION</div><h2>Say hello to <span id="email-company">a buyer</span></h2><p class="modal-sub">A thoughtful note can be the start of something good.</p><p id="contact-source" class="modal-sub">Choose a public business email for your note.</p><form id="email-form"><label id="email-recipient-field" class="field"><span>TO (PUBLIC BUSINESS EMAIL)</span><input id="email-to" type="email" required placeholder="buyer@store.com" autocomplete="email"></label><label class="field"><span>SUBJECT</span><input id="email-subject" required maxlength="200"></label><label class="field"><span>YOUR NOTE</span><textarea id="email-text" rows="8" maxlength="10000" required></textarea></label><div class="compliance-note">This opens a one-to-one draft in your email app. Review the recipient and message, add your full business postal address, attach the catalogue manually, and send only to people who agreed to receive your email. Honor opt-outs.</div><div class="modal-actions"><button type="button" class="secondary" id="cancel-email">Cancel</button><button class="send-btn" type="submit">Open email draft <span>↗</span></button></div></form></dialog>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
 
