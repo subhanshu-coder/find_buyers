@@ -73,7 +73,7 @@ async function handleRequest(req,res) {
   if (req.method === 'OPTIONS') { res.writeHead(204, {...localCorsHeaders(req.headers.origin),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
   if (pathname.startsWith('/api/')) {
     try {
-      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, snov:!!(process.env.SNOV_API_USER_ID && process.env.SNOV_API_SECRET), resend:!!(process.env.RESEND_API_KEY && process.env.SENDER_EMAIL && !process.env.SENDER_EMAIL.includes('your-verified-domain.com')), demo:!process.env.FOURSQUARE_API_KEY });
+      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, snov:!!(process.env.SNOV_API_USER_ID && process.env.SNOV_API_SECRET), resend:false, demo:!process.env.FOURSQUARE_API_KEY });
       if (pathname === '/api/search' && req.method === 'POST') {
         if (!process.env.FOURSQUARE_API_KEY) return json(req,res,503,{error:'Foursquare is not configured. Add FOURSQUARE_API_KEY to .env.'});
         const b = await body(req); const city = String(b.city || '').trim(); const productCategory=String(b.productCategory||'Votive candle holders').trim(); const buyerType=String(b.buyerType||'votive candle holders').trim();
@@ -125,19 +125,7 @@ async function handleRequest(req,res) {
         return json(req,res,200,{domain,emails:[...new Map(emails.map(e=>[e.email.toLowerCase(),e])).values()],pending:enrichmentPending,contactType:'buyer'});
       }
       if (pathname === '/api/send' && req.method === 'POST') {
-        if (!process.env.RESEND_API_KEY || !process.env.SENDER_EMAIL) return json(req,res,503,{error:'Resend is not configured. Add RESEND_API_KEY and SENDER_EMAIL to .env.'});
-        const b=await body(req); const subject=String(b.subject || '').trim(), text=String(b.text || '').trim();
-        const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const recipients=Array.isArray(b.recipients)?[...new Set(b.recipients.map(x=>String(x).trim()).filter(Boolean))]:[];
-        const to=String(b.to || '').trim();
-        if ((!recipients.length&&!emailPattern.test(to)) || recipients.some(email=>!emailPattern.test(email)) || recipients.length>50 || !subject || !text) return json(req,res,400,{error:'Add a valid recipient and message. Bulk email supports up to 50 recipients.'});
-        if(subject.length>200 || text.length>10000) return json(req,res,400,{error:'Subject or message is too long.'});
-        const senderAddress=String(process.env.SENDER_EMAIL).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-        const message={from:process.env.SENDER_EMAIL,to:recipients.length?[senderAddress]:[to],subject,text};
-        if(recipients.length) message.bcc=recipients;
-        const result=await api('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(message)});
-        if (!result.id) throw new Error('Resend did not confirm the message. Check your Resend account and verified sender.');
-        return json(req,res,200,{id:result.id,message:'Email accepted by Resend.'});
+        return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
       }
       return json(req,res,404,{error:'API route not found.'});
     } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); return json(req,res,502,{error:message}); }
