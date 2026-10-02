@@ -33,7 +33,7 @@ function outreachDetails(category=selectedProductCategory()){
  const collection=product.replace(/^Handcrafted /,'');
  return {subject:`${product} – Wholesale Inquiry`,body:`Hi,
 
-I’m Subhanshu Pal from Mumbai, India. We manufacture and export ${description}
+I’m Subhanshu Pal from Om Enterprises, India. We manufacture and export ${description}
 
 We offer ${offer}
 
@@ -43,7 +43,9 @@ Would you be interested in receiving our wholesale pricing and MOQ?
 
 Best regards,
 Subhanshu Pal
-Mumbai, India`}
+Business Development Manager
+Om Enterprises
+Moradabad, India`}
 }
 function outreachText(category=selectedProductCategory()){return outreachDetails(category).body}
 function prepareEmailDraft(p){const draft=outreachDetails(p.productCategory||selectedProductCategory());p.draftSubject=draft.subject;p.draftText=draft.body}
