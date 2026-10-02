@@ -21,8 +21,32 @@ function lookupBuyer(p,silent=false){if(emailLookupBlockedReason){if(!silent)toa
 async function lookupBuyerNow(p,silent=false){if(!config.snov){toast('Add Snov.io API User ID and API Secret to the Vercel environment to find emails.');return false}const domain=domainOf(p.website);if(!domain){p.emailState='none';p.emailReason='No website is listed for this buyer.';render();return false}p.emailState='checking';render();try{const d=await request('/api/contacts',{domain});p.emails=d.emails||[];p.emailState=p.emails.length?'found':d.pending?'pending':'none';if(p.emails.length)prepareEmailDraft(p);p.emailReason=p.emailState==='none'?`No public business email was found for ${domain}.`:'';render();if(!silent)toast(p.emails.length?`Found ${p.emails.length} email address(es) for ${p.name}.`:d.pending?`Snov.io is still checking ${domain}. Try again in a few seconds.`:`No public email found for ${domain}.`);return p.emails.length>0}catch(e){p.emailState='unknown';p.emailReason=e.message;if(/Snov\.io returned 402|Payment Required/i.test(e.message)){emailLookupBlockedReason='Snov.io stopped email lookups: the API returned 402 Payment Required. Check your Snov.io billing and available API credits, then refresh the page.';$('#email-lookup-note').textContent=emailLookupBlockedReason}render();if(!silent)toast(emailLookupBlockedReason||e.message);return false}}
 async function autoLookupSearchResults(){const generation=++emailLookupGeneration,searchResults=prospects;if(!searchResults.length)return;if(!config.snov){$('#email-lookup-note').textContent='Buyer results are shown, but automatic email lookup is unavailable. Add Snov.io API credentials in Vercel.';return}const note=$('#email-lookup-note');note.textContent=`Checking email contacts for ${searchResults.length} businesses one at a time… Snov.io lookups may use credits.`;for(const p of searchResults){if(generation!==emailLookupGeneration)return;if(p.emailState==='found')continue;if(!p.website){p.emailState='none';render();continue}await lookupBuyer(p,true);if(generation!==emailLookupGeneration)return;if(emailLookupBlockedReason){note.textContent=emailLookupBlockedReason;return}const finished=searchResults.filter(x=>x.emailState!=='checking'&&x.emailState!=='unknown').length;note.textContent=`Checking email contacts… ${finished}/${searchResults.length} businesses checked. Results and email filters update as they arrive.`}if(generation===emailLookupGeneration){const count=searchResults.filter(p=>emailsFor(p).length).length,noEmail=searchResults.filter(p=>p.emailState==='none').length,unresolved=searchResults.length-count-noEmail;note.textContent=`Email lookup complete: ${count} businesses have public contacts, ${noEmail} had no email returned, and ${unresolved} checks remain pending or need retry.`}}
 function selectedProductCategory(){return $('#product-category').value.trim()||'home decor'}
-function outreachText(category=selectedProductCategory()){return `Hello,\n\nI’m subhanshu pal, we create ${category.toLowerCase()}, and I thought it may be a good fit for your store.\n\nWould you be open to taking a look at our collection? I’d be glad to share a short line sheet and wholesale details.\n\nWarmly,\nsubhanshu pal\nmumbai, india\n\nIf this isn’t relevant, reply and I won’t follow up.`}
-function prepareEmailDraft(p){const category=p.productCategory||selectedProductCategory();p.draftSubject=`A thoughtful fit for ${category} — ${p.name}`;p.draftText=outreachText(category)}
+function outreachDetails(category=selectedProductCategory()){
+ const key=category.toLowerCase();
+ let product,description,offer='wholesale pricing, custom designs, private labeling, and international shipping.';
+ if(key.includes('singing bowl')){product='Handcrafted Singing Bowls';description='handcrafted singing bowls for meditation, wellness, yoga, sound healing, and spiritual retail.';offer='wholesale pricing, custom requirements, and international shipping.'}
+ else if(key.includes('crystal')){product='Crystal Candle Holders';description='handcrafted crystal candle holders for home decor, gifting, hospitality, and retail.'}
+ else if(key.includes('votive')){product='Votive Candle Holders';description='handcrafted votive candle holders for home decor, gifting, hospitality, and retail.'}
+ else if(key.includes('glassware')){product='Handcrafted Decorative Glassware';description='handcrafted decorative glassware for home decor, gifting, hospitality, and retail.'}
+ else if(key.includes('home decor')){product='Handcrafted Home Decor';description='handcrafted home decor products for retail, gifting, hospitality, and interior decor.'}
+ else{product='Handcrafted Candle Holders';description='handcrafted metal candle holders and decorative candleware for home decor, gifting, hospitality, and retail.'}
+ const collection=product.replace(/^Handcrafted /,'');
+ return {subject:`${product} – Wholesale Inquiry`,body:`Hi,
+
+I’m Subhanshu Pal from Mumbai, India. We manufacture and export ${description}
+
+We offer ${offer}
+
+I’ve attached our ${collection} Collection for a quick look.
+
+Would you be interested in receiving our wholesale pricing and MOQ?
+
+Best regards,
+Subhanshu Pal
+Mumbai, India`}
+}
+function outreachText(category=selectedProductCategory()){return outreachDetails(category).body}
+function prepareEmailDraft(p){const draft=outreachDetails(p.productCategory||selectedProductCategory());p.draftSubject=draft.subject;p.draftText=draft.body}
 async function openSingleComposer(p){if(!emailsFor(p).length&&p.emailState==='unknown'&&p.website&&config.snov)await lookupBuyer(p,true);prepareEmailDraft(p);bulkMode=false;$('#email-company').textContent=p.name;$('#contact-source').textContent=emailsFor(p).length?`Public business email found for ${p.name}.`:(p.website?`No email found yet. Check ${domainOf(p.website)} or enter an address published by the business.`:'No website is listed. Enter a public business email you have verified.');const to=$('#email-to');to.required=true;to.readOnly=false;to.value=emailsFor(p)[0]||'';$('#email-recipient-field').classList.remove('hidden');$('#email-subject').value=p.draftSubject;$('#email-text').value=p.draftText;$('#email-form').dataset.mode='single';$('#email-modal').showModal();const send=$('#email-form .send-btn');send.innerHTML='Open in email app <span>↗</span>'}
 function openBulkComposer(){const recipients=selectedRecipientEmails();if(!recipients.length){toast('Select a buyer with an email address first.');return}if(recipients.length>1){toast('Open one buyer at a time so each store receives a private message and can reply directly.');return}const p=prospects.find(item=>emailsFor(item).some(email=>email.toLowerCase()===recipients[0].toLowerCase()));if(p)openSingleComposer(p)}
 function selectedRecipientEmails(){return [...new Set([...selectedIds].flatMap(id=>emailsFor(prospects.find(p=>String(p.id)===id)||{})))]}
