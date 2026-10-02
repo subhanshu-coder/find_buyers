@@ -38,6 +38,7 @@ async function api(url, init) {
   if (!r.ok) {
     if (r.status === 401 && url.includes('snov.io')) throw new Error('Snov.io rejected the API credentials. Check SNOV_API_USER_ID and SNOV_API_SECRET in .env.');
     if (r.status === 403 && url.includes('snov.io')) throw new Error('Snov.io denied this request. Check that API access is enabled for this account.');
+    if (r.status === 402 && url.includes('snov.io')) throw new Error('Snov.io returned 402 Payment Required. Check your Snov.io API plan and available credits.');
     if (r.status === 429 && url.includes('snov.io')) throw new Error('Snov.io API rate limit reached. Wait a moment and retry.');
     if (r.status === 403 && url.includes('foursquare.com')) throw new Error('Foursquare denied this search (403). Check Places API access for this key.');
     if (r.status === 401 && url.includes('foursquare.com')) throw new Error('Foursquare rejected this key (401). Use a Service API Key from your Foursquare Developer Console.');
@@ -135,7 +136,7 @@ async function handleRequest(req,res) {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
       }
       return json(req,res,404,{error:'API route not found.'});
-    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
+    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:/Snov\.io returned 402/i.test(message)?402:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
   }
   let file = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const target=path.resolve(root,file);
