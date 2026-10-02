@@ -100,7 +100,7 @@ async function handleRequest(req,res) {
         const prospects=await pollSnovResult(started.links?.result||`https://api.snov.io/v2/domain-search/prospects/result/${encodeURIComponent(prospectTask)}`,token);
         const candidates=Array.isArray(prospects.data)?prospects.data:[];
         const buyerCandidates=candidates.filter(p=>p.search_emails_start).slice(0,3);
-        const emails=[];
+        let emails=[];
         let enrichmentPending=prospects.status!=='completed',enrichmentError=null;
         for(const prospect of buyerCandidates){
           try{
