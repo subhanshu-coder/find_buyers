@@ -37,7 +37,7 @@ I’m Subhanshu Pal from Mumbai, India. We manufacture and export ${description}
 
 We offer ${offer}
 
-I’ve attached our ${collection} Collection for a quick look.
+I’d be glad to share our ${collection} Collection for a quick look.
 
 Would you be interested in receiving our wholesale pricing and MOQ?
 
