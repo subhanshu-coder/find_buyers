@@ -30,6 +30,10 @@ Foursquare Places returns up to 50 potential retailers per city/product/keyword 
 
 Use truthful sender details, include a valid postal address and opt-out instructions in commercial messages, and contact only recipients who agreed to hear from you.
 
+## Gmail sent email logging to Google Sheets
+
+HomeScout opens a reviewed one-recipient Gmail draft; you send it yourself and attach the catalogue manually. To record sent messages in the sheet, install the Google Apps Script logger once from the Sheet sync guide (public/sheet-sync.html). It targets spreadsheet 1TpqpbO9_cYFGDcFqIVidmvJR2lm5ply4ok-TFmP6H_I, tab ID 1211719026, and writes product, sent date, company, and recipient email into the existing four columns. It checks the same Gmail account every five minutes and uses a hidden ID column to prevent duplicate rows. Google account authorization is required; logging will not run until setup is completed. Keep the suggested subject format intact so the script can identify product and company.
+
 ## API endpoints
 
 - `GET /api/config` — reports whether provider integrations are configured.
