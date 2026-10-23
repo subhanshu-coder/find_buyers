@@ -20,13 +20,13 @@ Cities include Anchorage, Wasilla, Palmer, Kenai, Soldotna, Homer, Juneau, Sitka
 
 ## Vercel deployment
 
-Import the repository root into Vercel. The included `vercel.json` uses the **Other** framework, serves `public/` as static assets, and deploys `/api` as a serverless function. Add `FOURSQUARE_API_KEY`, `SNOV_API_USER_ID`, and `SNOV_API_SECRET` in the Vercel project's Environment Variables, then redeploy. Never commit `.env` or put API secrets in browser code.
+Import the repository root into Vercel. The included `vercel.json` uses the **Other** framework, serves `public/` as static assets, and deploys `/api` as a serverless function. Add `FOURSQUARE_API_KEY` and `APOLLO_API_KEY` as server-only environment variables in Vercel, then redeploy. The Apollo key needs access to People API Search and People Enrichment. Never commit `.env` or put API secrets in browser code.
 
 GitHub Pages serves only static files and cannot run the API. Deploy the backend separately and set the page's `?api=https://YOUR-API-HOST` parameter if using Pages.
 
 ## Buyer emails and outreach
 
-Foursquare Places returns up to 50 potential retailers per city/product/keyword search. After search, Snov.io checks up to three buyer contacts per business, sequentially, to avoid bursts against its API rate limit. This can take time and use Snov.io credits. Results appear as checks complete and can be filtered by email availability. Email drafts open one recipient at a time in the user's email app; direct sending through Resend is disabled for contacts discovered by the buyer finder.
+Foursquare Places returns up to 50 potential retailers per city/product/keyword search. Apollo People API Search finds likely buyer contacts but does not return email addresses. The user must click “Find email” for a business to run People Enrichment; it tries up to three matched buyer contacts and may use Apollo credits. Results appear as checks complete and can be filtered by email availability. Email drafts open one recipient at a time in the user's email app; direct sending through Resend is disabled for contacts discovered by the buyer finder.
 
 Use truthful sender details, include a valid postal address and opt-out instructions in commercial messages, and contact only recipients who agreed to hear from you.
 
@@ -34,10 +34,14 @@ Use truthful sender details, include a valid postal address and opt-out instruct
 
 HomeScout opens a reviewed one-recipient Gmail draft; you send it yourself and attach the catalogue manually. To record sent messages in the sheet, install the Google Apps Script logger once from the Sheet sync guide (public/sheet-sync.html). It targets spreadsheet 1TpqpbO9_cYFGDcFqIVidmvJR2lm5ply4ok-TFmP6H_I, tab ID 1211719026, and writes product, sent date, company, and recipient email into the existing four columns. It checks the same Gmail account every five minutes and uses a hidden ID column to prevent duplicate rows. Google account authorization is required; logging will not run until setup is completed. Keep the suggested subject format intact so the script can identify product and company.
 
+## Apollo contact lookup
+
+The application keeps the Apollo key on the server. Set APOLLO_API_KEY as a Vercel Secret, not a browser variable. Apollo access requires People API Search and People Enrichment endpoint permissions; plan restrictions may also apply. Email search uses a company domain and job-title filters, then enriches up to three people, which may consume credits. See the official [People API Search documentation](https://docs.apollo.io/reference/people-api-search) and [People Enrichment documentation](https://docs.apollo.io/reference/people-enrichment).
+
 ## API endpoints
 
 - `GET /api/config` — reports whether provider integrations are configured.
 - `POST /api/search` — searches Foursquare for a city, product category, and buyer keyword.
-- `POST /api/contacts` — searches Snov.io for domain email results.
+- `POST /api/contacts` — searches Apollo people by company domain, then enriches up to three people for work email addresses.
 - `POST /api/send` — disabled for buyer-finder contacts; the app opens a reviewed one-to-one draft in the sender's email app.
 
