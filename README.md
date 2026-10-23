@@ -1,47 +1,35 @@
 # HomeScout — Alaska Home Decor Buyer Finder
 
-HomeScout helps home decor sellers discover potential retail buyers in Alaska, automatically look up public business email contacts, review websites, and prepare individual email drafts.
+HomeScout helps home decor sellers find potential retail buyers in Alaska, view business websites and phone numbers, look up verified work emails through Prospeo, and prepare individual Gmail drafts.
 
 ## Run locally
 
 1. Install Node.js 18 or later.
-2. Copy `.env.example` to `.env` and add API credentials. Keep `.env` private.
-3. Run `node server.js` and open `http://localhost:3000`.
+2. Copy `.env.example` to `.env` and add your API keys. Keep `.env` private.
+3. Run `npm start` and open `http://localhost:3000`.
 
-The website is in `public/`; the Vercel API function is in `api/`. No npm packages are required.
+## Render deployment
 
-## Search options
+The Render web service runs `node server.js` from the repository root. Configure these server-side variables in the Render service Environment settings:
 
-Product categories: Singing bowls; Candle holders; Crystal candle holders; Decorative glassware and home decor; Votive candle holders.
+- `FOURSQUARE_API_KEY` — business/place search.
+- `PROSPEO_API_KEY` — verified buyer email lookup.
 
-Buyer keywords: votive candle holders; votive holder; votive candle holder; glass votive holders; metal votive holders; decorative votive holders; tealight holders; tea light holders; candle cups; candle lanterns; home decor store; gift shop; gift store; candle shop; home accessories store; interior decor store; boutique; event decor supplier; wedding decor supplier; hospitality supplier; restaurant decor; hotel decor supplier; wholesale candle holders; home decor wholesaler; giftware wholesaler.
+Save the variables and redeploy the service. Keep both keys out of browser code and GitHub. Render service: [find-buyers.onrender.com](https://find-buyers.onrender.com).
 
-Cities include Anchorage, Wasilla, Palmer, Kenai, Soldotna, Homer, Juneau, Sitka, Ketchikan, Skagway, Wrangell, Fairbanks, North Pole, Delta Junction, Nenana, Nome, Bethel, Dillingham, Unalaska, and Utqiagvik.
+## Search coverage
 
-## Vercel deployment
+The app searches the Alaska city list in the form and filters retailers by the chosen product category and buyer keyword. Results depend on Foursquare listings and may include businesses without websites. Prospeo lookup is started only when the user clicks “Find email”; it searches the business website domain and buyer job titles. Provider plan limits and credits apply.
 
-Import the repository root into Vercel. The included `vercel.json` uses the **Other** framework, serves `public/` as static assets, and deploys `/api` as a serverless function. Add `FOURSQUARE_API_KEY` and `APOLLO_API_KEY` as server-only environment variables in Vercel, then redeploy. The Apollo key needs access to People API Search and People Enrichment. Never commit `.env` or put API secrets in browser code.
+## Email drafts and logging
 
-GitHub Pages serves only static files and cannot run the API. Deploy the backend separately and set the page's `?api=https://YOUR-API-HOST` parameter if using Pages.
+Email drafts open in Gmail for review; HomeScout does not send messages automatically. Attach the product catalogue manually. Contact only recipients who agreed to hear from you, include your business postal address, and honor opt-outs.
 
-## Buyer emails and outreach
-
-Foursquare Places returns up to 50 potential retailers per city/product/keyword search. Apollo People API Search finds likely buyer contacts but does not return email addresses. The user must click “Find email” for a business to run People Enrichment; it tries up to three matched buyer contacts and may use Apollo credits. Results appear as checks complete and can be filtered by email availability. Email drafts open one recipient at a time in the user's email app; direct sending through Resend is disabled for contacts discovered by the buyer finder.
-
-Use truthful sender details, include a valid postal address and opt-out instructions in commercial messages, and contact only recipients who agreed to hear from you.
-
-## Gmail sent email logging to Google Sheets
-
-HomeScout opens a reviewed one-recipient Gmail draft; you send it yourself and attach the catalogue manually. To record sent messages in the sheet, install the Google Apps Script logger once from the Sheet sync guide (public/sheet-sync.html). It targets spreadsheet 1TpqpbO9_cYFGDcFqIVidmvJR2lm5ply4ok-TFmP6H_I, tab ID 1211719026, and writes product, sent date, company, and recipient email into the existing four columns. It checks the same Gmail account every five minutes and uses a hidden ID column to prevent duplicate rows. Google account authorization is required; logging will not run until setup is completed. Keep the suggested subject format intact so the script can identify product and company.
-
-## Apollo contact lookup
-
-The application keeps the Apollo key on the server. Set APOLLO_API_KEY as a Vercel Secret, not a browser variable. Apollo access requires People API Search and People Enrichment endpoint permissions; plan restrictions may also apply. Email search uses a company domain and job-title filters, then enriches up to three people, which may consume credits. See the official [People API Search documentation](https://docs.apollo.io/reference/people-api-search) and [People Enrichment documentation](https://docs.apollo.io/reference/people-enrichment).
+To log sent emails in the linked Google Sheet, complete the one-time Apps Script setup in `public/sheet-sync.html`. Logging requires Google account authorization and checks Gmail periodically.
 
 ## API endpoints
 
-- `GET /api/config` — reports whether provider integrations are configured.
+- `GET /api/config` — reports whether Foursquare and Prospeo are configured.
 - `POST /api/search` — searches Foursquare for a city, product category, and buyer keyword.
-- `POST /api/contacts` — searches Apollo people by company domain, then enriches up to three people for work email addresses.
-- `POST /api/send` — disabled for buyer-finder contacts; the app opens a reviewed one-to-one draft in the sender's email app.
-
+- `POST /api/contacts` — searches Prospeo for a verified business email using a company domain.
+- `POST /api/send` — direct sending is disabled; use the reviewed Gmail draft.
