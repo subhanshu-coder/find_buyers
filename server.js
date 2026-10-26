@@ -38,7 +38,9 @@ async function api(url, init) {
     if (url.includes('prospeo.io') && data.error === true) {
       const code=String(data.error_code||'unknown').toUpperCase();
       if (['NO_RESULTS','NO_MATCH'].includes(code)) return data;
-      const error=new Error("Prospeo API error (" + code + "): " + (data.filter_error || data.message || "Check API access and account limits."));
+      const detail=data.filter_error || data.message || "Check API access and account limits.";
+      const message=/RATE.?LIMIT/.test(code)?'Prospeo rate limit reached. Wait before trying another email lookup.':code==='INSUFFICIENT_CREDITS'?'Prospeo credits are exhausted. Check the account balance and plan.':"Prospeo API error ("+code+"): "+detail;
+      const error=new Error(message);
       error.provider='prospeo'; error.providerStatus=r.status; error.providerCode=code;
       if (/RATE.?LIMIT/.test(code)) error.providerStatus=429;
       else if (code==='INSUFFICIENT_CREDITS') error.providerStatus=402;
