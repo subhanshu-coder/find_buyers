@@ -145,20 +145,18 @@ async function handleRequest(req,res) {
         if (normalized.hostedSubdomain) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',reason:'Prospeo cannot search this hosted-site subdomain. Use the business’s own domain if available.'});
         const headers={'Content-Type':'application/json','Accept':'application/json','X-KEY':process.env.PROSPEO_API_KEY};
         // Avoid over-filtering by title: small shops often do not publish buyer titles.
-        const search=await prospeoApi('https://api.prospeo.io/search-person',{method:'POST',headers,body:JSON.stringify({page:1,filters:{company:{websites:{include:[domain]}}}})});
-        const rows=(search.results||[]).map(row=>row.person||{}).filter(person=>person.person_id);
-        const titleScore=person=>/owner|founder|buyer|purchas|merchand|category|store manager|general manager|president|ceo|retail/i.test(person.current_job_title||'')?1:0;
-        const candidates=rows.sort((a,b)=>Number(b.email?.status==='VERIFIED')-Number(a.email?.status==='VERIFIED')||titleScore(b)-titleScore(a)).slice(0,2);
-        if(!candidates.length) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,reason:'Prospeo has no matching people for this company domain.'});
-        for(const person of candidates) {
-          const enriched=await prospeoApi('https://api.prospeo.io/enrich-person',{method:'POST',headers,body:JSON.stringify({only_verified_email:true,data:{person_id:person.person_id,company_website:domain}})});
+        const search=await prospeoApi('https://api.prospeo.io/search-person',{method:'POST',headers,body:JSON.stringify({page:1,filters:{company:{websites:{include:[domain]}},person_contact_details:{email:['VERIFIED']},max_person_per_company:3}})});
+        const rows=(search.results||[]).map(row=>({person:row.person||{},company:row.company||{}})).filter(row=>row.person.person_id);
+        const candidates=rows.filter(row=>row.person.email?.status==='VERIFIED').slice(0,3);
+        if(!candidates.length) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,reason:rows.length?'Prospeo returned people for this domain, but none had a verified work email.':'Prospeo has no verified-email people linked to this root domain. Check that the buyer website is their own domain; Prospeo cannot match hosted-site subdomains.'});
+        const emails=[];
+        for(const row of candidates) {
+          const person=row.person,companyWebsite=row.company.website||domain;
+          const enriched=await prospeoApi('https://api.prospeo.io/enrich-person',{method:'POST',headers,body:JSON.stringify({only_verified_email:true,data:{person_id:person.person_id,company_website:companyWebsite}})});
           const contact=enriched.person||{},email=contact.email?.revealed?contact.email.email:'';
-          if(email) {
-            const emails=[{email,firstName:contact.first_name||person.first_name||'',lastName:contact.last_name||person.last_name||'',position:contact.current_job_title||person.current_job_title||'',type:'buyer',verification:contact.email.status||'unknown'}];
-            return json(req,res,200,{domain,emails,pending:false,contactType:'buyer',searched:rows.length,checked:candidates.indexOf(person)+1});
-          }
+          if(email&&!emails.some(item=>item.email.toLowerCase()===email.toLowerCase())) emails.push({email,firstName:contact.first_name||person.first_name||'',lastName:contact.last_name||person.last_name||'',position:contact.current_job_title||person.current_job_title||'',type:'buyer',verification:contact.email.status||'unknown'});
         }
-        return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,checked:candidates.length,reason:'Prospeo found people but no verified email was available for the first two matches.'});
+        return json(req,res,200,{domain,emails,pending:false,contactType:'buyer',searched:rows.length,checked:candidates.length,reason:emails.length?'':`Prospeo found ${candidates.length} verified-email profiles at this domain, but enrichment did not reveal an address. Check Prospeo plan/credits or the returned company domain.`});
       }
       if (pathname === '/api/send' && req.method === 'POST') {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
