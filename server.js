@@ -147,7 +147,7 @@ async function handleRequest(req,res) {
         // Avoid over-filtering by title: small shops often do not publish buyer titles.
         const search=await prospeoApi('https://api.prospeo.io/search-person',{method:'POST',headers,body:JSON.stringify({page:1,filters:{company:{websites:{include:[domain]}},person_contact_details:{email:['VERIFIED']},max_person_per_company:3}})});
         const rows=(search.results||[]).map(row=>({person:row.person||{},company:row.company||{}})).filter(row=>row.person.person_id);
-        const candidates=rows.filter(row=>row.person.email?.status==='VERIFIED').slice(0,3);
+        const candidates=rows.slice(0,3);
         if(!candidates.length) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,reason:rows.length?'Prospeo returned people for this domain, but none had a verified work email.':'Prospeo has no verified-email people linked to this root domain. Check that the buyer website is their own domain; Prospeo cannot match hosted-site subdomains.'});
         const emails=[];
         for(const row of candidates) {
