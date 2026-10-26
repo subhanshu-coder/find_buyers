@@ -53,6 +53,25 @@ async function api(url, init) {
 }
 
 
+const MULTI_PART_PUBLIC_SUFFIXES = new Set(['co.uk','org.uk','ac.uk','com.au','net.au','org.au','co.nz','co.in','co.jp','co.kr','com.br','com.mx','com.sg','com.tr','co.za']);
+const HOSTED_SITE_SUFFIXES = ['wixsite.com','wordpress.com','blogspot.com','placeweb.site','myshopify.com','square.site','webflow.io','godaddysites.com','weebly.com','squarespace.com','jimdofree.com','sites.google.com','carrd.co','strikingly.com','site123.me','webnode.page','webnode.com','wix.com','ecwid.com'];
+function normalizeBusinessDomain(input) {
+  const value=String(input||'').trim();
+  if(!value) return null;
+  let hostname;
+  try { hostname=new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(value)?value:`https://${value}`).hostname.toLowerCase().replace(/\.$/,''); }
+  catch { return null; }
+  hostname=hostname.replace(/^www\./,'');
+  const labels=hostname.split('.');
+  if(labels.length<2||labels.some(label=>!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return null;
+  const suffixTwo=labels.slice(-2).join('.');
+  const rootLabelCount=MULTI_PART_PUBLIC_SUFFIXES.has(suffixTwo)?3:2;
+  if(labels.length<rootLabelCount) return null;
+  const domain=labels.slice(-rootLabelCount).join('.');
+  const hostedSubdomain=HOSTED_SITE_SUFFIXES.some(suffix=>hostname.endsWith(`.${suffix}`));
+  return {domain,hostedSubdomain};
+}
+
 async function handleRequest(req,res) {
   const pathname = new URL(req.url, 'http://localhost').pathname;
   if (req.method === 'OPTIONS') { res.writeHead(204, {...localCorsHeaders(req.headers.origin),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
@@ -75,8 +94,9 @@ async function handleRequest(req,res) {
       }
       if (pathname === '/api/contacts' && req.method === 'POST') {
         if (!process.env.PROSPEO_API_KEY) return json(req,res,503,{error:'Prospeo is not configured. Add PROSPEO_API_KEY as a server-side environment variable, then redeploy.'});
-        const b=await body(req); const domain=String(b.domain || '').toLowerCase().replace(/^https?:\/\//,'').split('/')[0].replace(/^www\./,'');
-        if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return json(req,res,400,{error:'This prospect has no valid website domain.'});
+        const b=await body(req),normalized=normalizeBusinessDomain(b.domain),domain=normalized?.domain;
+        if (!domain) return json(req,res,400,{error:'This prospect has no valid website domain.'});
+        if (normalized.hostedSubdomain) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',reason:'Prospeo cannot search this hosted-site subdomain. Use the business’s own domain if available.'});
         const headers={'Content-Type':'application/json','Accept':'application/json','X-KEY':process.env.PROSPEO_API_KEY};
         const titles=['owner','founder','buyer','purchasing manager','merchandising manager','category manager','store manager','general manager','president'];
         const search=await api('https://api.prospeo.io/search-person',{method:'POST',headers,body:JSON.stringify({page:1,filters:{company:{websites:{include:[domain]}},person_job_title:{include:titles,match_mode:'CONTAINS'}}})});
@@ -91,7 +111,7 @@ async function handleRequest(req,res) {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
       }
       return json(req,res,404,{error:'API route not found.'});
-    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:/available credits|insufficient credits/i.test(message)?402:/API key/i.test(message)?401:/denied this API request|plan required/i.test(message)?403:/invalid filters/i.test(message)?400:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
+    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:/available credits|insufficient credits/i.test(message)?402:/API key/i.test(message)?401:/denied this API request|plan required/i.test(message)?403:/invalid[_ ]filters/i.test(message)?400:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
   }
   let file = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const target=path.resolve(root,file);
