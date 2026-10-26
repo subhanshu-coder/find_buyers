@@ -32,12 +32,19 @@ function body(req) {
 async function api(url, init) {
   let r;
   try { r = await fetch(url, init); }
-  catch { throw new Error(url.includes('prospeo.io') ? 'HomeScout could not connect to Prospeo. Check server network access and try again.' : url.includes('resend.com') ? 'HomeScout could not connect to Resend. Check server network access and try again.' : 'HomeScout could not connect to Foursquare. Check server network access and try again.'); }
+  catch { throw new Error(url.includes('prospeo.io') ? 'HomeScout could not connect to Prospeo. Check server network access and try again.' : url.includes('places.googleapis.com') ? 'HomeScout could not connect to Google Places. Check server network access and try again.' : url.includes('resend.com') ? 'HomeScout could not connect to Resend. Check server network access and try again.' : 'HomeScout could not connect to Foursquare. Check server network access and try again.'); }
   const raw = await r.text(); let data = {}; try { data = JSON.parse(raw); } catch {}
   if (!r.ok) {
     if (url.includes('prospeo.io') && data.error === true) {
       if (data.error_code === 'NO_RESULTS') return data;
       throw new Error("Prospeo API error (" + (data.error_code || "unknown") + "): " + (data.filter_error || data.message || "Check API key, filters, and plan access."));
+    }
+    if (url.includes('places.googleapis.com')) {
+      const detail=data.error?.message||data.message||'';
+      if(r.status===401) throw new Error('Google Places rejected the API key. Check GOOGLE_PLACES_API_KEY.');
+      if(r.status===403) throw new Error('Google Places denied this request. Enable Places API (New) and billing for the Google Cloud project.');
+      if(r.status===429) throw new Error('Google Places rate limit reached. Check your Google Cloud quota.');
+      throw new Error(`Google Places API error (${r.status}): ${detail||'Check the request and API configuration.'}`);
     }
     if (r.status === 401 && url.includes('prospeo.io')) throw new Error('Prospeo rejected the request. Check PROSPEO_API_KEY in the server environment.');
     if (r.status === 403 && url.includes('prospeo.io')) throw new Error('Prospeo denied this API request. Check API access and plan eligibility.');
@@ -77,20 +84,35 @@ async function handleRequest(req,res) {
   if (req.method === 'OPTIONS') { res.writeHead(204, {...localCorsHeaders(req.headers.origin),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
   if (pathname.startsWith('/api/')) {
     try {
-      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, prospeo:!!process.env.PROSPEO_API_KEY, resend:false, demo:!process.env.FOURSQUARE_API_KEY });
+      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, google:!!process.env.GOOGLE_PLACES_API_KEY, prospeo:!!process.env.PROSPEO_API_KEY, resend:false, demo:!(process.env.FOURSQUARE_API_KEY||process.env.GOOGLE_PLACES_API_KEY) });
       if (pathname === '/api/search' && req.method === 'POST') {
-        if (!process.env.FOURSQUARE_API_KEY) return json(req,res,503,{error:'Foursquare is not configured. Add FOURSQUARE_API_KEY to .env.'});
-        const b = await body(req); const city = String(b.city || '').trim(); const productCategory=String(b.productCategory||'Votive candle holders').trim(); const buyerType=String(b.buyerType||'votive candle holders').trim();
-        if (!city || city.length > 100) return json(req,res,400,{error:'Enter a US city.'});
+        if (!process.env.FOURSQUARE_API_KEY && !process.env.GOOGLE_PLACES_API_KEY) return json(req,res,503,{error:'Buyer search is not configured. Add FOURSQUARE_API_KEY or GOOGLE_PLACES_API_KEY to the server environment.'});
+        const b=await body(req),city=String(b.city||'').trim(),productCategory=String(b.productCategory||'Votive candle holders').trim(),buyerType=String(b.buyerType||'votive candle holders').trim();
+        if(!city||city.length>100) return json(req,res,400,{error:'Enter an Alaska city.'});
         if(productCategory.length>100||buyerType.length>100) return json(req,res,400,{error:'Choose a valid product category and buyer keyword.'});
-        const searchText = `${buyerType} ${productCategory}`;
-        const query = new URLSearchParams({query:searchText,near:`${city}, Alaska, United States`,limit:'50',fields:'fsq_place_id,name,location,website,tel,categories'});
-        const result = await api(`https://places-api.foursquare.com/places/search?${query}`,{headers:{'Accept':'application/json','Authorization':`Bearer ${process.env.FOURSQUARE_API_KEY}`,'X-Places-Api-Version':'2025-06-17'}});
-
-        const places = result.results || [];
-        const relevant = places.filter(p => !/repair|home care|security|health|office/i.test([p.name,...(p.categories||[]).map(c=>c.name)].join(' ')));
-        const prospects = relevant.map((p,i) => ({id:p.fsq_place_id || `foursquare-${i}`,name:p.name || 'Retailer',address:p.location?.formatted_address || [p.location?.locality,p.location?.region,p.location?.country].filter(Boolean).join(', ') || city,website:p.website || '',phone:p.tel || '',maps:'',type:(p.categories || []).map(c=>c.name).filter(Boolean).join(', ') || buyerType,rating:null,reviews:0,domain:p.website || ''}));
-        return json(req,res,200,{prospects});
+        const searchText=`${buyerType} ${productCategory}`;
+        const jobs=[];
+        if(process.env.FOURSQUARE_API_KEY) jobs.push((async()=>{
+          const query=new URLSearchParams({query:searchText,near:`${city}, Alaska, United States`,limit:'50',fields:'fsq_place_id,name,location,website,tel,categories'});
+          const result=await api(`https://places-api.foursquare.com/places/search?${query}`,{headers:{'Accept':'application/json','Authorization':`Bearer ${process.env.FOURSQUARE_API_KEY}`,'X-Places-Api-Version':'2025-06-17'}});
+          return (result.results||[]).filter(p=>!/repair|home care|security|health|office/i.test([p.name,...(p.categories||[]).map(c=>c.name)].join(' '))).map((p,i)=>({id:p.fsq_place_id||`foursquare-${i}`,name:p.name||'Retailer',address:p.location?.formatted_address||[p.location?.locality,p.location?.region,p.location?.country].filter(Boolean).join(', ')||city,website:p.website||'',phone:p.tel||'',maps:'',type:(p.categories||[]).map(c=>c.name).filter(Boolean).join(', ')||buyerType,rating:null,reviews:0,domain:p.website||''}));
+        })());
+        if(process.env.GOOGLE_PLACES_API_KEY) jobs.push((async()=>{
+          const result=await api('https://places.googleapis.com/v1/places:searchText',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':process.env.GOOGLE_PLACES_API_KEY,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.types'},body:JSON.stringify({textQuery:`${searchText} in ${city}, Alaska, United States`,pageSize:20,regionCode:'US',languageCode:'en'})});
+          return (result.places||[]).map((p,i)=>({id:`google-${p.id||i}`,name:p.displayName?.text||'Retailer',address:p.formattedAddress||`${city}, Alaska, United States`,website:p.websiteUri||'',phone:p.nationalPhoneNumber||'',maps:'',type:(p.types||[]).map(t=>t.replace(/_/g,' ')).join(', ')||buyerType,rating:null,reviews:0,domain:p.websiteUri||''}));
+        })());
+        const settled=await Promise.allSettled(jobs),warnings=[],all=[];
+        for(const result of settled){if(result.status==='fulfilled')all.push(...result.value);else warnings.push(result.reason?.message||'A search provider failed.')}
+        if(!all.length&&warnings.length) throw new Error(warnings.join('; '));
+        const merged=new Map();
+        for(const p of all){
+          const normalized=normalizeBusinessDomain(p.website),domain=normalized&&!normalized.hostedSubdomain?normalized.domain:'';
+          const key=domain||`${String(p.name||'').toLowerCase().trim()}|${String(p.address||'').toLowerCase().trim()}`;
+          const current=merged.get(key);
+          if(!current) merged.set(key,p);
+          else {if(!current.website&&p.website)current.website=p.website;if(!current.phone&&p.phone)current.phone=p.phone;if((!current.type||current.type==='Retail prospect')&&p.type)current.type=p.type;}
+        }
+        return json(req,res,200,{prospects:[...merged.values()],warnings});
       }
       if (pathname === '/api/contacts' && req.method === 'POST') {
         if (!process.env.PROSPEO_API_KEY) return json(req,res,503,{error:'Prospeo is not configured. Add PROSPEO_API_KEY as a server-side environment variable, then redeploy.'});
@@ -111,7 +133,7 @@ async function handleRequest(req,res) {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
       }
       return json(req,res,404,{error:'API route not found.'});
-    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:/available credits|insufficient credits/i.test(message)?402:/API key/i.test(message)?401:/denied this API request|plan required/i.test(message)?403:/invalid[_ ]filters/i.test(message)?400:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
+    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:/Google Places rejected the API key|Prospeo rejected the request|API key/i.test(message)?401:/Google Places denied|denied this API request|plan required/i.test(message)?403:/available credits|insufficient credits/i.test(message)?402:/Google Places API error \(400\)|invalid[_ ]filters/i.test(message)?400:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
   }
   let file = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const target=path.resolve(root,file);
