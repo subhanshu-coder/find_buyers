@@ -32,21 +32,17 @@ function body(req) {
 async function api(url, init) {
   let r;
   try { r = await fetch(url, init); }
-  catch { throw new Error(url.includes('prospeo.io') ? 'HomeScout could not connect to Prospeo. Check server network access and try again.' : url.includes('places.googleapis.com') ? 'HomeScout could not connect to Google Places. Check server network access and try again.' : url.includes('resend.com') ? 'HomeScout could not connect to Resend. Check server network access and try again.' : 'HomeScout could not connect to Foursquare. Check server network access and try again.'); }
+  catch { throw new Error(url.includes('api.snov.io') ? 'HomeScout could not connect to Snov.io. Check server network access and retry.' : url.includes('places.googleapis.com') ? 'HomeScout could not connect to Google Places. Check server network access and try again.' : url.includes('resend.com') ? 'HomeScout could not connect to Resend. Check server network access and try again.' : 'HomeScout could not connect to Foursquare. Check server network access and try again.'); }
   const raw = await r.text(); let data = {}; try { data = JSON.parse(raw); } catch {}
   if (!r.ok) {
-    if (url.includes('prospeo.io') && data.error === true) {
-      const code=String(data.error_code||'unknown').toUpperCase();
-      if (['NO_RESULTS','NO_MATCH'].includes(code)) return data;
-      const detail=data.filter_error || data.message || "Check API access and account limits.";
-      const message=/RATE.?LIMIT/.test(code)?'Prospeo rate limit reached. Wait before trying another email lookup.':code==='INSUFFICIENT_CREDITS'?'Prospeo credits are exhausted. Check the account balance and plan.':"Prospeo API error ("+code+"): "+detail;
-      const error=new Error(message);
-      error.provider='prospeo'; error.providerStatus=r.status; error.providerCode=code;
-      if (/RATE.?LIMIT/.test(code)) error.providerStatus=429;
-      else if (code==='INSUFFICIENT_CREDITS') error.providerStatus=402;
-      else if (code==='INVALID_API_KEY') error.providerStatus=401;
-      else if (code==='PLAN_REQUIRED') error.providerStatus=403;
-      else if (code==='INVALID_FILTERS') error.providerStatus=400;
+    if (url.includes('api.snov.io')) {
+      const detail=String(data.error?.message||data.message||data.error_description||data.error||'');
+      if (r.status===401) throw new Error('Snov.io rejected the API credentials. Check SNOV_API_USER_ID and SNOV_API_SECRET in Render.');
+      if (r.status===403) throw new Error('Snov.io denied this request. Confirm API access is enabled on the account.');
+      if (r.status===429) throw new Error('Snov.io API rate limit reached. Wait briefly before retrying.');
+      if (r.status===402||/not.?enough.?credits|insufficient.?credits/i.test(detail)) throw new Error('Snov.io credits are insufficient for this lookup.');
+      const error=new Error(detail||`Snov.io API returned ${r.status}.`);
+      error.providerStatus=r.status;
       throw error;
     }
     if (url.includes('places.googleapis.com')) {
@@ -56,32 +52,16 @@ async function api(url, init) {
       if(r.status===429) throw new Error('Google Places rate limit reached. Check your Google Cloud quota.');
       throw new Error(`Google Places API error (${r.status}): ${detail||'Check the request and API configuration.'}`);
     }
-    if (r.status === 401 && url.includes('prospeo.io')) throw new Error('Prospeo rejected the request. Check PROSPEO_API_KEY in the server environment.');
-    if (r.status === 403 && url.includes('prospeo.io')) throw new Error('Prospeo denied this API request. Check API access and plan eligibility.');
-    if (r.status === 402 && url.includes('prospeo.io')) throw new Error('Prospeo requires available credits or a plan with API access. Check your Prospeo account.');
-    if (r.status === 429 && url.includes('prospeo.io')) throw new Error('Prospeo rate limit reached. Wait before retrying.');
     if (r.status === 403 && url.includes('foursquare.com')) throw new Error('Foursquare denied this search (403). Check Places API access for this key.');
     if (r.status === 401 && url.includes('foursquare.com')) throw new Error('Foursquare rejected this key (401). Use a Service API Key from your Foursquare Developer Console.');
     if (r.status === 429 && url.includes('foursquare.com')) throw new Error('Foursquare returned 429: this key or project has reached its Places API usage limit. Check Foursquare API Usage; a new key may share the same project limit.');
     const detail = data.error?.message || data.message || data.error_description || '';
     throw new Error(detail || `Provider returned ${r.status}`);
   }
+  if (url.includes('api.snov.io') && (data.status==='not_enough_credits'||/not.?enough.?credits|insufficient.?credits/i.test(String(data.error||data.message||'')))) {
+    throw new Error('Snov.io credits are insufficient for this lookup.');
+  }
   return data;
-}
-
-let prospeoQueue=Promise.resolve();
-let lastProspeoRequestAt=0;
-function prospeoApi(url,init) {
-  const task=prospeoQueue.then(async()=>{
-    const configured=Number(process.env.PROSPEO_MIN_INTERVAL_MS);
-    const minInterval=Number.isFinite(configured)&&configured>=1000?configured:3100;
-    const wait=Math.max(0,lastProspeoRequestAt+minInterval-Date.now());
-    if(wait) await new Promise(resolve=>setTimeout(resolve,wait));
-    lastProspeoRequestAt=Date.now();
-    return api(url,init);
-  });
-  prospeoQueue=task.catch(()=>{});
-  return task;
 }
 
 const MULTI_PART_PUBLIC_SUFFIXES = new Set(['co.uk','org.uk','ac.uk','com.au','net.au','org.au','co.nz','co.in','co.jp','co.kr','com.br','com.mx','com.sg','com.tr','co.za']);
@@ -102,13 +82,46 @@ function normalizeBusinessDomain(input) {
   const hostedSubdomain=HOSTED_SITE_SUFFIXES.some(suffix=>hostname.endsWith(`.${suffix}`));
   return {domain,hostedSubdomain};
 }
+let snovToken='',snovTokenExpiresAt=0,snovQueue=Promise.resolve(),lastSnovRequestAt=0;
+async function getSnovAccessToken() {
+  if(!process.env.SNOV_API_USER_ID||!process.env.SNOV_API_SECRET) throw new Error('Snov.io is not configured. Add SNOV_API_USER_ID and SNOV_API_SECRET in the Render service environment.');
+  if(snovToken&&snovTokenExpiresAt>Date.now()+60000)return snovToken;
+  const form=new URLSearchParams({grant_type:'client_credentials',client_id:process.env.SNOV_API_USER_ID,client_secret:process.env.SNOV_API_SECRET});
+  const auth=await api('https://api.snov.io/v1/oauth/access_token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form});
+  if(!auth.access_token)throw new Error('Snov.io did not issue an access token. Check the API User ID and API Secret.');
+  snovToken=auth.access_token;
+  snovTokenExpiresAt=Date.now()+Number(auth.expires_in||3600)*1000;
+  return snovToken;
+}
+function snovApi(url,init) {
+  const task=snovQueue.then(async()=>{
+    const wait=Math.max(0,lastSnovRequestAt+1050-Date.now());
+    if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+    lastSnovRequestAt=Date.now();
+    return api(url,init);
+  });
+  snovQueue=task.catch(()=>{});
+  return task;
+}
+async function pollSnovResult(url,token) {
+  const target=new URL(url);
+  if(target.origin!=='https://api.snov.io')throw new Error('Snov.io returned an invalid results URL.');
+  let result={status:'in_progress',data:[]};
+  for(let attempt=0;attempt<8;attempt++){
+    if(attempt)await new Promise(resolve=>setTimeout(resolve,600));
+    result=await snovApi(target.toString(),{headers:{Authorization:`Bearer ${token}`}});
+    if(String(result.status||'').toLowerCase()==='completed')return result;
+  }
+  return result;
+}
+
 
 async function handleRequest(req,res) {
   const pathname = new URL(req.url, 'http://localhost').pathname;
   if (req.method === 'OPTIONS') { res.writeHead(204, {...localCorsHeaders(req.headers.origin),'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type'}); return res.end(); }
   if (pathname.startsWith('/api/')) {
     try {
-      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, google:!!process.env.GOOGLE_PLACES_API_KEY, prospeo:!!process.env.PROSPEO_API_KEY, resend:false, demo:!(process.env.FOURSQUARE_API_KEY||process.env.GOOGLE_PLACES_API_KEY) });
+      if (pathname === '/api/config' && req.method === 'GET') return json(req,res,200,{ foursquare:!!process.env.FOURSQUARE_API_KEY, google:!!process.env.GOOGLE_PLACES_API_KEY, snov:!!(process.env.SNOV_API_USER_ID&&process.env.SNOV_API_SECRET), prospeo:false, resend:false, demo:!(process.env.FOURSQUARE_API_KEY||process.env.GOOGLE_PLACES_API_KEY) });
       if (pathname === '/api/search' && req.method === 'POST') {
         if (!process.env.FOURSQUARE_API_KEY && !process.env.GOOGLE_PLACES_API_KEY) return json(req,res,503,{error:'Buyer search is not configured. Add FOURSQUARE_API_KEY or GOOGLE_PLACES_API_KEY to the server environment.'});
         const b=await body(req),city=String(b.city||'').trim(),productCategory=String(b.productCategory||'Votive candle holders').trim(),buyerType=String(b.buyerType||'votive candle holders').trim();
@@ -139,39 +152,48 @@ async function handleRequest(req,res) {
         return json(req,res,200,{prospects:[...merged.values()],warnings});
       }
       if (pathname === '/api/contacts' && req.method === 'POST') {
-        if (!process.env.PROSPEO_API_KEY) return json(req,res,503,{error:'Prospeo is not configured. Add PROSPEO_API_KEY as a server-side environment variable, then redeploy.'});
+        if(!process.env.SNOV_API_USER_ID||!process.env.SNOV_API_SECRET)return json(req,res,503,{error:'Snov.io is not configured. Add SNOV_API_USER_ID and SNOV_API_SECRET in Render Environment, then redeploy.'});
         const b=await body(req),normalized=normalizeBusinessDomain(b.domain),domain=normalized?.domain;
-        if (!domain) return json(req,res,400,{error:'This prospect has no valid website domain.'});
-        if (normalized.hostedSubdomain) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',reason:'Prospeo cannot search this hosted-site subdomain. Use the business’s own domain if available.'});
-        const headers={'Content-Type':'application/json','Accept':'application/json','X-KEY':process.env.PROSPEO_API_KEY};
-        // Avoid over-filtering by title: small shops often do not publish buyer titles.
-        const companyName=String(b.company||'').trim(),address=String(b.address||'');
-        const searchPayload=filters=>JSON.stringify({page:1,filters:{...filters,person_contact_details:{email:['VERIFIED']},max_person_per_company:3}});
-        let search=await prospeoApi('https://api.prospeo.io/search-person',{method:'POST',headers,body:searchPayload({company:{websites:{include:[domain]}}})});
-        let rows=(search.results||[]).map(row=>({person:row.person||{},company:row.company||{}})).filter(row=>row.person.person_id),matchedVia='domain';
-        // If Prospeo has the business under a different root domain, try its exact retailer name,
-        // then keep only same-name company records that match the buyer's city when available.
-        if(!rows.length&&companyName) {
-          const byName=await prospeoApi('https://api.prospeo.io/search-person',{method:'POST',headers,body:searchPayload({company:{names:{include:[companyName]}}})});
-          const normalizeName=value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-          const requestedName=normalizeName(companyName);
-          rows=(byName.results||[]).map(row=>({person:row.person||{},company:row.company||{}})).filter(row=>{
-            if(!row.person.person_id||normalizeName(row.company.name)!==requestedName)return false;
-            const city=String(row.company.location?.city||'').toLowerCase();
-            return !city||!address||address.toLowerCase().includes(city);
-          });
-          if(rows.length)matchedVia='company-name';
-        }
-        const candidates=rows.slice(0,3);
-        if(!candidates.length) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,reason:companyName?`Prospeo has no verified-email contacts for ${companyName} at ${domain}, including an exact-name lookup. The business may not be covered or its listed site may be incorrect.`:`Prospeo has no verified-email contacts linked to ${domain}. Confirm this is the buyer's own root domain.`});
+        if(!domain)return json(req,res,400,{error:'This buyer has no valid website domain.'});
+        if(normalized.hostedSubdomain)return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',reason:'Snov.io cannot search a hosted-site subdomain. Use the retailer’s own domain if it has one.'});
+        const token=await getSnovAccessToken(),headers={Authorization:`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'};
+        const form=new URLSearchParams({domain,page:'1'});
+        ['Buyer','Purchasing Manager','Merchandising Manager','Owner','Founder','President','Store Manager','Category Manager'].forEach(position=>form.append('positions[]',position));
+        const started=await snovApi('https://api.snov.io/v2/domain-search/prospects/start',{method:'POST',headers,body:form});
+        const prospectTask=started.meta?.task_hash;
+        if(!prospectTask)throw new Error('Snov.io did not start the buyer search. Check account access and API response.');
+        const prospects=await pollSnovResult(started.links?.result||`https://api.snov.io/v2/domain-search/prospects/result/${encodeURIComponent(prospectTask)}`,token);
+        const candidateRows=Array.isArray(prospects.data)?prospects.data.filter(p=>p.search_emails_start).slice(0,3):[];
         const emails=[];
-        for(const row of candidates) {
-          const person=row.person,companyWebsite=row.company.website||domain;
-          const enriched=await prospeoApi('https://api.prospeo.io/enrich-person',{method:'POST',headers,body:JSON.stringify({only_verified_email:true,data:{person_id:person.person_id,company_website:companyWebsite}})});
-          const contact=enriched.person||{},email=contact.email?.revealed?contact.email.email:'';
-          if(email&&!emails.some(item=>item.email.toLowerCase()===email.toLowerCase())) emails.push({email,firstName:contact.first_name||person.first_name||'',lastName:contact.last_name||person.last_name||'',position:contact.current_job_title||person.current_job_title||'',type:'buyer',verification:contact.email.status||'unknown'});
+        let pending=String(prospects.status||'').toLowerCase()!=='completed';
+        for(const prospect of candidateRows){
+          const emailUrl=new URL(prospect.search_emails_start);
+          if(emailUrl.origin!=='https://api.snov.io'||!emailUrl.pathname.includes('/domain-search/prospects/search-emails/start/'))continue;
+          const startedEmail=await snovApi(emailUrl.toString(),{method:'POST',headers,body:new URLSearchParams()});
+          const emailTask=startedEmail.meta?.task_hash;
+          if(!emailTask)continue;
+          const result=await pollSnovResult(startedEmail.links?.result||`https://api.snov.io/v2/domain-search/prospects/search-emails/result/${encodeURIComponent(emailTask)}`,token);
+          if(String(result.status||'').toLowerCase()!=='completed'){pending=true;continue}
+          const payload=result.data||{},rows=Array.isArray(payload)?payload:(Array.isArray(payload.emails)?payload.emails:[]);
+          for(const item of rows){
+            const email=String(item.email||item.value||'').trim();
+            if(email&&!emails.some(found=>found.email.toLowerCase()===email.toLowerCase()))emails.push({email,firstName:prospect.first_name||payload.first_name||'',lastName:prospect.last_name||payload.last_name||'',position:prospect.position||prospect.job_title||'',type:'buyer',verification:item.smtp_status||item.verification||'unknown'});
+          }
         }
-        return json(req,res,200,{domain,emails,pending:false,contactType:'buyer',searched:rows.length,checked:candidates.length,matchedVia,reason:emails.length?'':`Prospeo found ${candidates.length} verified-email profiles, but enrichment did not reveal an address. Check Prospeo plan/credits or the company website.`});
+        let contactType='buyer';
+        if(!emails.length&&!pending){
+          const genericStart=await snovApi('https://api.snov.io/v2/domain-search/generic-contacts/start',{method:'POST',headers,body:new URLSearchParams({domain})});
+          const genericTask=genericStart.meta?.task_hash;
+          if(genericTask){
+            const generic=await pollSnovResult(genericStart.links?.result||`https://api.snov.io/v2/domain-search/generic-contacts/result/${encodeURIComponent(genericTask)}`,token);
+            const payload=generic.data||{},rows=Array.isArray(payload)?payload:(Array.isArray(payload.contacts)?payload.contacts:(Array.isArray(payload.emails)?payload.emails:[]));
+            for(const item of rows){const email=String(item.email||item.value||'').trim();if(email&&!emails.some(found=>found.email.toLowerCase()===email.toLowerCase()))emails.push({email,firstName:'',lastName:'',position:item.position||'',type:'general',verification:item.smtp_status||item.verification||'unknown'});}
+            pending=String(generic.status||'').toLowerCase()!=='completed';
+            if(emails.length)contactType='general';
+          }
+        }
+        const reason=emails.length?'':pending?'Snov.io is still preparing contact results. Try this buyer again in a few seconds.':`Snov.io returned no public email for ${domain}. This retailer may not be covered in its contact database.`;
+        return json(req,res,200,{domain,emails,pending,contactType,searched:Array.isArray(prospects.data)?prospects.data.length:0,reason});
       }
       if (pathname === '/api/send' && req.method === 'POST') {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
@@ -179,7 +201,7 @@ async function handleRequest(req,res) {
       return json(req,res,404,{error:'API route not found.'});
     } catch(e) {
       const message=e.message==='fetch failed'?'HomeScout could not reach the provider. Check server network access and restart the server.':(e.message||'API request failed.');
-      const status=e.providerStatus||(/rate.?limit/i.test(message)?429:/available credits|insufficient credits/i.test(message)?402:/Google Places rejected the API key|Prospeo rejected the request|INVALID_API_KEY|API key/i.test(message)?401:/Google Places denied|denied this API request|plan required|PLAN_REQUIRED/i.test(message)?403:/invalid[_ ]filters|INVALID_FILTERS/i.test(message)?400:502);
+      const status=e.providerStatus||(/rate.?limit/i.test(message)?429:/available credits|insufficient credits|Snov.io credits/i.test(message)?402:/Google Places rejected the API key|Snov.io rejected the API credentials|INVALID_API_KEY|API key/i.test(message)?401:/Google Places denied|Snov.io denied|denied this API request|plan required|PLAN_REQUIRED/i.test(message)?403:/invalid[_ ]filters|INVALID_FILTERS/i.test(message)?400:502);
       console.error('[api] request failed',{route:pathname,status,message});
       return json(req,res,status,{error:message});
     }
