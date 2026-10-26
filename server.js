@@ -36,8 +36,16 @@ async function api(url, init) {
   const raw = await r.text(); let data = {}; try { data = JSON.parse(raw); } catch {}
   if (!r.ok) {
     if (url.includes('prospeo.io') && data.error === true) {
-      if (data.error_code === 'NO_RESULTS') return data;
-      throw new Error("Prospeo API error (" + (data.error_code || "unknown") + "): " + (data.filter_error || data.message || "Check API key, filters, and plan access."));
+      const code=String(data.error_code||'unknown').toUpperCase();
+      if (['NO_RESULTS','NO_MATCH'].includes(code)) return data;
+      const error=new Error("Prospeo API error (" + code + "): " + (data.filter_error || data.message || "Check API access and account limits."));
+      error.provider='prospeo'; error.providerStatus=r.status; error.providerCode=code;
+      if (/RATE.?LIMIT/.test(code)) error.providerStatus=429;
+      else if (code==='INSUFFICIENT_CREDITS') error.providerStatus=402;
+      else if (code==='INVALID_API_KEY') error.providerStatus=401;
+      else if (code==='PLAN_REQUIRED') error.providerStatus=403;
+      else if (code==='INVALID_FILTERS') error.providerStatus=400;
+      throw error;
     }
     if (url.includes('places.googleapis.com')) {
       const detail=data.error?.message||data.message||'';
@@ -59,6 +67,20 @@ async function api(url, init) {
   return data;
 }
 
+let prospeoQueue=Promise.resolve();
+let lastProspeoRequestAt=0;
+function prospeoApi(url,init) {
+  const task=prospeoQueue.then(async()=>{
+    const configured=Number(process.env.PROSPEO_MIN_INTERVAL_MS);
+    const minInterval=Number.isFinite(configured)&&configured>=1000?configured:3100;
+    const wait=Math.max(0,lastProspeoRequestAt+minInterval-Date.now());
+    if(wait) await new Promise(resolve=>setTimeout(resolve,wait));
+    lastProspeoRequestAt=Date.now();
+    return api(url,init);
+  });
+  prospeoQueue=task.catch(()=>{});
+  return task;
+}
 
 const MULTI_PART_PUBLIC_SUFFIXES = new Set(['co.uk','org.uk','ac.uk','com.au','net.au','org.au','co.nz','co.in','co.jp','co.kr','com.br','com.mx','com.sg','com.tr','co.za']);
 const HOSTED_SITE_SUFFIXES = ['wixsite.com','wordpress.com','blogspot.com','placeweb.site','myshopify.com','square.site','webflow.io','godaddysites.com','weebly.com','squarespace.com','jimdofree.com','sites.google.com','carrd.co','strikingly.com','site123.me','webnode.page','webnode.com','wix.com','ecwid.com'];
@@ -120,20 +142,32 @@ async function handleRequest(req,res) {
         if (!domain) return json(req,res,400,{error:'This prospect has no valid website domain.'});
         if (normalized.hostedSubdomain) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',reason:'Prospeo cannot search this hosted-site subdomain. Use the business’s own domain if available.'});
         const headers={'Content-Type':'application/json','Accept':'application/json','X-KEY':process.env.PROSPEO_API_KEY};
-        const titles=['owner','founder','buyer','purchasing manager','merchandising manager','category manager','store manager','general manager','president'];
-        const search=await api('https://api.prospeo.io/search-person',{method:'POST',headers,body:JSON.stringify({page:1,filters:{company:{websites:{include:[domain]}},person_job_title:{include:titles,match_mode:'CONTAINS'}}})});
-        const candidates=(search.results||[]).map(row=>row.person||{}).filter(person=>person.person_id&&person.email?.status==='VERIFIED').slice(0,1);
-        if(!candidates.length) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:(search.results||[]).length});
-        const person=candidates[0];
-        const enriched=await api('https://api.prospeo.io/enrich-person',{method:'POST',headers,body:JSON.stringify({only_verified_email:true,data:{person_id:person.person_id,company_website:domain}})});
-        const contact=enriched.person||{},email=contact.email?.revealed?contact.email.email:'';
-        const emails=email?[{email,firstName:contact.first_name||person.first_name||'',lastName:contact.last_name||person.last_name||'',position:contact.current_job_title||person.current_job_title||'',type:'buyer',verification:contact.email.status||'unknown'}]:[];
-        return json(req,res,200,{domain,emails,pending:false,contactType:'buyer',searched:(search.results||[]).length});
-      }      if (pathname === '/api/send' && req.method === 'POST') {
+        // Avoid over-filtering by title: small shops often do not publish buyer titles.
+        const search=await prospeoApi('https://api.prospeo.io/search-person',{method:'POST',headers,body:JSON.stringify({page:1,filters:{company:{websites:{include:[domain]}}}})});
+        const rows=(search.results||[]).map(row=>row.person||{}).filter(person=>person.person_id);
+        const titleScore=person=>/owner|founder|buyer|purchas|merchand|category|store manager|general manager|president|ceo|retail/i.test(person.current_job_title||'')?1:0;
+        const candidates=rows.sort((a,b)=>Number(b.email?.status==='VERIFIED')-Number(a.email?.status==='VERIFIED')||titleScore(b)-titleScore(a)).slice(0,2);
+        if(!candidates.length) return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,reason:'Prospeo has no matching people for this company domain.'});
+        for(const person of candidates) {
+          const enriched=await prospeoApi('https://api.prospeo.io/enrich-person',{method:'POST',headers,body:JSON.stringify({only_verified_email:true,data:{person_id:person.person_id,company_website:domain}})});
+          const contact=enriched.person||{},email=contact.email?.revealed?contact.email.email:'';
+          if(email) {
+            const emails=[{email,firstName:contact.first_name||person.first_name||'',lastName:contact.last_name||person.last_name||'',position:contact.current_job_title||person.current_job_title||'',type:'buyer',verification:contact.email.status||'unknown'}];
+            return json(req,res,200,{domain,emails,pending:false,contactType:'buyer',searched:rows.length,checked:candidates.indexOf(person)+1});
+          }
+        }
+        return json(req,res,200,{domain,emails:[],pending:false,contactType:'buyer',searched:rows.length,checked:candidates.length,reason:'Prospeo found people but no verified email was available for the first two matches.'});
+      }
+      if (pathname === '/api/send' && req.method === 'POST') {
         return json(req,res,403,{error:'Direct sending to buyer-finder contacts is disabled. Resend prohibits unsolicited cold outreach. Use the one-to-one email draft only for recipients who agreed to hear from you.'});
       }
       return json(req,res,404,{error:'API route not found.'});
-    } catch(e) { const message=e.message === 'fetch failed' ? 'HomeScout could not reach the provider. Check server network access and restart the server.' : (e.message || 'API request failed.'); const status=/rate limit reached/i.test(message)?429:/Google Places rejected the API key|Prospeo rejected the request|API key/i.test(message)?401:/Google Places denied|denied this API request|plan required/i.test(message)?403:/available credits|insufficient credits/i.test(message)?402:/Google Places API error \(400\)|invalid[_ ]filters/i.test(message)?400:502; console.error('[api] request failed',{route:pathname,status,message}); return json(req,res,status,{error:message}); }
+    } catch(e) {
+      const message=e.message==='fetch failed'?'HomeScout could not reach the provider. Check server network access and restart the server.':(e.message||'API request failed.');
+      const status=e.providerStatus||(/rate.?limit/i.test(message)?429:/available credits|insufficient credits/i.test(message)?402:/Google Places rejected the API key|Prospeo rejected the request|INVALID_API_KEY|API key/i.test(message)?401:/Google Places denied|denied this API request|plan required|PLAN_REQUIRED/i.test(message)?403:/invalid[_ ]filters|INVALID_FILTERS/i.test(message)?400:502);
+      console.error('[api] request failed',{route:pathname,status,message});
+      return json(req,res,status,{error:message});
+    }
   }
   let file = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const target=path.resolve(root,file);
