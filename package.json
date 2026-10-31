@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Find US home decor retailers and contact leads with API integrations.",
-  "scripts": { "start": "node server.js" }
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "nodemailer": "^7.0.5" }
 }
 

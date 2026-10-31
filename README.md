@@ -1,6 +1,6 @@
 # HomeScout — Alaska Home Decor Buyer Finder
 
-HomeScout helps home decor sellers discover potential retailers, view business websites and phones, search Snov.io for buyer contacts and public business emails, and prepare individual Gmail drafts.
+HomeScout helps home decor sellers discover potential retailers using Foursquare Places and OpenStreetMap, shows public contact details listed in OpenStreetMap, and sends individual messages through Gmail SMTP.
 
 ## Run locally
 
@@ -12,15 +12,15 @@ HomeScout helps home decor sellers discover potential retailers, view business w
 
 Configure these server-side environment variables in the Render service:
 
-- `FOURSQUARE_API_KEY` — optional business discovery source.
-- `GOOGLE_PLACES_API_KEY` — optional Google Places Text Search source. If both search keys are configured, HomeScout merges and deduplicates both sources. Google Places usage is billed according to the requested fields and your Google Cloud project.
-- `SNOV_API_USER_ID and SNOV_API_SECRET` — buyer work-email lookup.
+- `FOURSQUARE_API_KEY` — Foursquare Places discovery. OpenStreetMap is queried as a second business-listing source.
+- `GMAIL_USER` — the Gmail mailbox used as the sender.
+- `GMAIL_APP_PASSWORD` — a Google App Password for Nodemailer. Create one after enabling Google 2-Step Verification. Do not use your normal Gmail password.
 
-Save the variables and redeploy. Never put provider keys in browser code or commit them to GitHub. Google Places returns business details such as the listing name, address, website, and phone when available; Snov.io is used for email enrichment.
+Set secrets only in Render Environment (or your local `.env`), then redeploy. Never put provider credentials in browser code or commit them to GitHub. OpenStreetMap lookups use Nominatim and the shared Overpass API; public servers can be busy. Public emails appear only when a business listing includes them, so many shops will have no email listed.
 
 ## Emails and outreach
 
-After searching, click **Find email** on a business to search Snov.io for buyer or general business emails. Snov.io access, rate limits, and credits apply. Email drafts open in Gmail for review; HomeScout does not send emails automatically. Attach the catalogue manually and contact only recipients who agreed to hear from you.
+After searching, review any public email shown on a buyer card, or enter a recipient address you have verified. The **Send with Gmail SMTP** button sends one message from `GMAIL_USER`; the API limits each client IP to five sends per hour. Review every recipient, include required sender details and an opt-out method in commercial messages, honor opt-outs, and attach the catalogue manually if needed. Google may block SMTP authentication or impose account sending limits. Nodemailer documents App Passwords for Gmail accounts with 2-Step Verification and recommends OAuth 2.0 for new production integrations.
 
 ## Google Sheets
 
@@ -28,7 +28,7 @@ To log sent emails, complete the one-time Apps Script setup described in `public
 
 ## API endpoints
 
-- `GET /api/config` — reports whether search and email providers are configured.
-- `POST /api/search` — searches configured Foursquare and/or Google Places sources.
-- `POST /api/contacts` — searches Snov.io for buyer and general business contacts using the business domain.
-- `POST /api/send` — direct sending is disabled; use the reviewed Gmail draft.
+- `GET /api/config` — reports Foursquare, OpenStreetMap, and SMTP readiness.
+- `POST /api/search` — searches Foursquare and OpenStreetMap business listings in the selected Alaska city.
+- `POST /api/send` — sends a single plain-text email through the configured Gmail SMTP account.
+
