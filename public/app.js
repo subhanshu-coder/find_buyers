@@ -35,7 +35,7 @@ I’m Subhanshu Pal from Om Enterprises, India. We manufacture and export ${desc
 
 We offer ${offer}
 
-I’ve attached our ${collection} Collection for a quick look.
+I’d be glad to share our ${collection} Collection and a short wholesale line sheet.
 
 Would you be interested in receiving our wholesale pricing and MOQ?
 

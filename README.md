@@ -20,7 +20,7 @@ Set secrets only in Render Environment (or your local `.env`), then redeploy. Ne
 
 ## Emails and outreach
 
-After searching, review any public email shown on a buyer card, or enter a recipient address you have verified. The **Send with Gmail SMTP** button sends one message from `GMAIL_USER`; the API limits each client IP to five sends per hour. Review every recipient, include required sender details and an opt-out method in commercial messages, honor opt-outs, and attach the catalogue manually if needed. Google may block SMTP authentication or impose account sending limits. Nodemailer documents App Passwords for Gmail accounts with 2-Step Verification and recommends OAuth 2.0 for new production integrations.
+After searching, review any public email shown on a buyer card, or enter a recipient address you have verified. The **Send with Gmail SMTP** button sends one text-only message from `GMAIL_USER`; the API limits each client IP to five sends per hour. Review every recipient, include required sender details and an opt-out method in commercial messages, honor opt-outs, and include a link to your collection when useful. Google may block SMTP authentication or impose account sending limits. Nodemailer documents App Passwords for Gmail accounts with 2-Step Verification and recommends OAuth 2.0 for new production integrations.
 
 ## Google Sheets
 
