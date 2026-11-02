@@ -7,7 +7,7 @@ services:
     envVars:
       - key: FOURSQUARE_API_KEY
         sync: false
-      - key: APOLLO_API_KEY
+      - key: PROSPEO_API_KEY
         sync: false
       - key: GMAIL_USER
         sync: false
