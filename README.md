@@ -14,10 +14,11 @@ Configure these server-side environment variables in the Render service:
 
 - `FOURSQUARE_API_KEY` — Foursquare Places discovery. OpenStreetMap is queried as a second business-listing source.
 - `TOMTOM_API_KEY` — TomTom Search API business discovery. TomTom returns place information such as website URLs and phone numbers; HomeScout’s public-page scanner looks for email addresses on the business website.
+- `APOLLO_API_KEY` — Apollo People API Search and People Enrichment. The app only calls Apollo when you click a buyer’s **Find with Apollo** button.
 - `GMAIL_USER` — the Gmail mailbox used as the sender.
 - `GMAIL_APP_PASSWORD` — a Google App Password for Nodemailer. Create one after enabling Google 2-Step Verification. Do not use your normal Gmail password.
 
-Set secrets only in Render Environment (or your local `.env`), then redeploy. Never put provider credentials in browser code or commit them to GitHub. TomTom uses its own account limits and terms. Website email lookup does not use Snov, Apollo, or Prospeo lookup credits: it reads a business’s public HTTPS website and up to two same-site contact/about pages. It checks at most 50 sites per search, four at a time, and caches results for six hours. Only visible, publicly published addresses can be found; many businesses publish none, and results are not verified. OpenStreetMap lookups use Nominatim and the shared Overpass API; public servers can be busy.
+Set secrets only in Render Environment (or your local `.env`), then redeploy. Never put provider credentials in browser code or commit them to GitHub. TomTom uses its own account limits and terms. Website email lookup does not use Snov, Apollo, or Prospeo lookup credits: it reads a business’s public HTTPS website and up to two same-site contact/about pages. It checks at most 50 sites per search, four at a time, and caches results for six hours. Only visible, publicly published addresses can be found; many businesses publish none, and results are not verified. Apollo People API Search costs 0 credits but returns no emails; the manually triggered single-person enrichment can consume Apollo credits when data is returned. HomeScout does not request personal emails, phones, or waterfall enrichment. Apollo may deny search/enrichment based on the key’s permissions, account eligibility, or plan. OpenStreetMap lookups use Nominatim and the shared Overpass API; public servers can be busy.
 
 ## Emails and outreach
 
@@ -32,5 +33,6 @@ To log sent emails, complete the one-time Apps Script setup described in `public
 - `GET /api/config` — reports TomTom, Foursquare, OpenStreetMap, and SMTP readiness.
 - `POST /api/search` — searches TomTom, Foursquare (when configured), and OpenStreetMap business listings in the selected Alaska city.
 - `POST /api/email-lookup` — checks up to 50 supplied business websites for public email addresses using bounded HTTPS requests.
+- `POST /api/apollo-email` — manually searches Apollo for one contact at a business domain and enriches only one person when Apollo reports a business email is available.
 - `POST /api/send` — sends a single plain-text email through the configured Gmail SMTP account.
 
