@@ -35,8 +35,8 @@
 .email-state.none{background:#f6eee5;color:#8b674c}
 .prospect-actions{gap:7px}
 .prospect-actions .contact-btn{padding:8px 9px;font-size:10px}
-.prospeo-lookup-btn{border:1px solid #d7ded2;border-radius:6px;background:#f4f7f1;color:#355c44;padding:8px 9px;font:600 10px 'DM Sans';cursor:pointer;white-space:nowrap}
-.prospeo-lookup-btn:disabled{opacity:.55;cursor:default}
+.snov-lookup-btn{border:1px solid #d7ded2;border-radius:6px;background:#f4f7f1;color:#355c44;padding:8px 9px;font:600 10px 'DM Sans';cursor:pointer;white-space:nowrap}
+.snov-lookup-btn:disabled{opacity:.55;cursor:default}
 @media(max-width:900px){#search-form{grid-template-columns:1fr 1fr}.search-btn{width:100%;justify-content:space-between}.prospect{grid-template-columns:18px 40px minmax(0,1fr)}.prospect-actions{grid-column:3;justify-content:flex-start}}
 @media(max-width:700px){#search-form{grid-template-columns:1fr}.prospect{grid-template-columns:17px 38px minmax(0,1fr);gap:8px}.prospect-actions{grid-column:2/4;flex-wrap:wrap}.buyer-tools{align-items:flex-start}.selection-actions{width:100%}.results-tools{gap:6px}.count{max-width:175px;text-align:right;line-height:1.4}.buyer-details{align-items:flex-start;flex-direction:column;gap:6px}.email-filters{width:100%}.filter-btn{padding:7px 9px}}
 .compliance-note a{color:var(--green);font-weight:700}.how-sync-link{color:var(--green);font-weight:700}@media(max-width:700px){.market{display:none}.top-right{gap:9px}.how-link{font-size:9px}}
